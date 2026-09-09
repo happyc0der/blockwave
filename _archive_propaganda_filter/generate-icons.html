@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Generate Icons for Propaganda Filter</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 600px;
+      margin: 50px auto;
+      padding: 20px;
+    }
+    .icon-preview {
+      display: inline-block;
+      margin: 10px;
+      text-align: center;
+    }
+    canvas {
+      border: 1px solid #ccc;
+      margin: 10px 0;
+    }
+    button {
+      padding: 10px 20px;
+      margin: 5px;
+      cursor: pointer;
+      background: #1d9bf0;
+      color: white;
+      border: none;
+      border-radius: 5px;
+    }
+    button:hover {
+      background: #1a8cd8;
+    }
+  </style>
+</head>
+<body>
+  <h1>Generate Placeholder Icons</h1>
+  <p>This tool will generate simple placeholder icons for the extension.</p>
+  
+  <div class="icon-preview">
+    <h3>16x16</h3>
+    <canvas id="icon16" width="16" height="16"></canvas><br>
+    <button onclick="downloadIcon(16)">Download icon16.png</button>
+  </div>
+  
+  <div class="icon-preview">
+    <h3>48x48</h3>
+    <canvas id="icon48" width="48" height="48"></canvas><br>
+    <button onclick="downloadIcon(48)">Download icon48.png</button>
+  </div>
+  
+  <div class="icon-preview">
+    <h3>128x128</h3>
+    <canvas id="icon128" width="128" height="128"></canvas><br>
+    <button onclick="downloadIcon(128)">Download icon128.png</button>
+  </div>
+  
+  <div style="margin-top: 30px;">
+    <button onclick="generateAll()" style="background: #0f1419;">Generate All Icons</button>
+  </div>
+
+  <script>
+    function drawIcon(canvas, size) {
+      const ctx = canvas.getContext('2d');
+      
+      // Clear canvas
+      ctx.clearRect(0, 0, size, size);
+      
+      // Background - gradient blue
+      const gradient = ctx.createLinearGradient(0, 0, size, size);
+      gradient.addColorStop(0, '#1d9bf0');
+      gradient.addColorStop(1, '#0f1419');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, size, size);
+      
+      // Draw a filter/funnel shape
+      ctx.fillStyle = 'white';
+      ctx.strokeStyle = 'white';
+      ctx.lineWidth = Math.max(1, size / 32);
+      
+      const centerX = size / 2;
+      const centerY = size / 2;
+      const radius = size * 0.3;
+      
+      // Draw a simple filter icon (funnel/triangle with lines)
+      ctx.beginPath();
+      
+      if (size >= 48) {
+        // Detailed icon for larger sizes
+        // Draw a filter/funnel shape
+        const topWidth = size * 0.6;
+        const bottomWidth = size * 0.2;
+        const height = size * 0.7;
+        const topY = (size - height) / 2;
+        
+        ctx.moveTo(centerX - topWidth/2, topY);
+        ctx.lineTo(centerX + topWidth/2, topY);
+        ctx.lineTo(centerX + bottomWidth/2, topY + height);
+        ctx.lineTo(centerX - bottomWidth/2, topY + height);
+        ctx.closePath();
+        ctx.fill();
+        
+        // Draw lines inside
+        ctx.strokeStyle = '#1d9bf0';
+        ctx.lineWidth = Math.max(1, size / 48);
+        for (let i = 1; i < 3; i++) {
+          const y = topY + (height / 4) * i;
+          const width = topWidth - (topWidth - bottomWidth) * (i / 3);
+          ctx.beginPath();
+          ctx.moveTo(centerX - width/2, y);
+          ctx.lineTo(centerX + width/2, y);
+          ctx.stroke();
+        }
+      } else {
+        // Simple icon for small sizes - just a triangle
+        ctx.beginPath();
+        ctx.moveTo(centerX, size * 0.2);
+        ctx.lineTo(size * 0.2, size * 0.8);
+        ctx.lineTo(size * 0.8, size * 0.8);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+    
+    function downloadIcon(size) {
+      const canvas = document.getElementById(`icon${size}`);
+      canvas.toBlob((blob) => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `icon${size}.png`;
+        a.click();
+        URL.revokeObjectURL(url);
+      });
+    }
+    
+    function generateAll() {
+      // Generate and draw all icons
+      [16, 48, 128].forEach(size => {
+        const canvas = document.getElementById(`icon${size}`);
+        drawIcon(canvas, size);
+      });
+      
+      alert('Icons generated! Click each download button to save them.');
+    }
+    
+    // Generate icons on load
+    window.onload = generateAll;
+  </script>
+</body>
+</html>
