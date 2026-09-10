@@ -322,7 +322,38 @@ scenes are a four-value enum and a line list, and splitting the compositor's
 layers across modules would have meant passing the frame around for no gain.
 Panels now added: `app/scores.py`, `src/tetris/bench.py`.
 
-### Next: step 2, game feel
+## Status — step 2 (game feel) complete
 
-Line-clear delay in the engine, then the clear flash, collapse animation,
-lock-delay pulse and level-up flourish. Then step 3, sound.
+**Line-clear delay in the engine.** A clear now blanks its rows immediately,
+holds the board for `clear_delay_ms` (400 ms at level 1, shrinking to 150 ms),
+then collapses the stack and spawns the next piece. Scoring still happens at the
+lock, so the player is paid at the moment of the placement.
+
+Blanking rather than deferring the clear is what keeps `check_invariants`
+honest: the board is never sitting on a full uncollapsed row. `LINE_CLEAR` now
+carries a `rows` payload, because a count alone cannot tell the renderer what to
+animate.
+
+Two tools stepped with `dt=0` and would have stalled forever on a board with no
+active piece — `tetris shot` and the render benchmark. Both now call the new
+`engine.finish_clear()` escape hatch.
+
+**Visuals.** Cleared rows wipe out from the centre over the pause. The active
+piece brightens as its lock delay runs down — before this there was no feedback
+at all for the most timing-sensitive moment in the game. Level ups, T-spins and
+perfect clears raise a brief toast over the board, which does *not* dim the
+frame the way the scene panels do, because the game is still being played
+underneath it.
+
+**Dead config removed.** `VisualProfile.particles` was declared and never read,
+and `arcade_max` advertised `particles=True` — a flag that claimed a feature
+that did not exist. Removed; particle bursts are a step-4 item.
+
+Test count: **193 → 211**, with `tests/test_clear_delay.py` covering the pause,
+the blanking invariant, input being ignored mid-clear, and a fuzz run asserting
+that no clearing row is ever non-empty.
+
+### Next: step 3, sound
+
+Then step 4: difficulty playtest, attract screen, particles, replay recording,
+README.

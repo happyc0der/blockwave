@@ -37,6 +37,9 @@ LOGIC_DT = 1.0 / LOGIC_HZ
 #: huge delta and the game fast-forwards through several pieces.
 MAX_FRAME_TIME = 0.25
 
+#: How long an announcement (level up, T-spin, perfect clear) stays on screen.
+TOAST_SECONDS = 1.2
+
 
 class Scene(Enum):
     TITLE = auto()
@@ -117,6 +120,7 @@ class Game:
 
         self.scores = scores_store.load()
         self._new_record = False
+        self._toast: tuple[str, float] | None = None
 
     # -- loop -------------------------------------------------------------
 
@@ -139,6 +143,7 @@ class Game:
                 accumulator = 0.0
 
             self.shake.update(frame_time)
+            self._update_toast(frame_time)
             self._present()
 
         pygame.quit()
@@ -171,6 +176,14 @@ class Game:
                 self.shake.kick(0.5 if event.value < 4 else 1.4)
             elif event.type is EventType.PIECE_LOCK:
                 self.input.on_piece_locked()
+            elif event.type is EventType.LEVEL_UP:
+                # Requirement 3 should be felt, not read off a number.
+                self._toast = (f"LEVEL {event.value}", TOAST_SECONDS)
+                self.shake.kick(0.8)
+            elif event.type is EventType.TSPIN:
+                self._toast = ("T-SPIN", TOAST_SECONDS * 0.7)
+            elif event.type is EventType.PERFECT_CLEAR:
+                self._toast = ("PERFECT CLEAR", TOAST_SECONDS)
             elif event.type is EventType.GAME_OVER:
                 self._new_record = scores_store.submit(self.scores, self.engine.stats)
                 scores_store.save(self.scores)
@@ -212,12 +225,20 @@ class Game:
                 elif key in binds.confirm:
                     self._new_game()
 
+    def _update_toast(self, dt: float) -> None:
+        if self._toast is None:
+            return
+        text, remaining = self._toast
+        remaining -= dt
+        self._toast = None if remaining <= 0.0 else (text, remaining)
+
     def _new_game(self) -> None:
         # reset() already applies start_level from the engine config.
         self.engine.reset(seed=random.randrange(1 << 30))
         self.input = InputState(self.input.config)
         self.shake.magnitude = 0.0
         self._new_record = False
+        self._toast = None
         self.scene = Scene.PLAYING
 
     # -- presentation -----------------------------------------------------
@@ -226,11 +247,39 @@ class Game:
         shake = self.shake.offset(self.layout.cell_px * 0.35)
         frame = self.compositor.render(self.engine, shake=shake)
 
+        if self._toast is not None and self.scene is Scene.PLAYING:
+            self._draw_toast(frame)
+
         lines = self._panel_lines()
         if lines:
             self._draw_panel(frame, lines)
 
         self.display.present(frame)
+
+    def _draw_toast(self, frame: np.ndarray) -> None:
+        """A brief announcement over the board, fading out.
+
+        Unlike the scene panels this does not dim the frame — the game is still
+        being played underneath it and must stay readable.
+        """
+        text, remaining = self._toast
+        board = self.layout.board
+        cell = self.layout.cell_px
+
+        fade = min(1.0, remaining / (TOAST_SECONDS * 0.5))
+        scale = fit_scale(text, board.w - cell, max(2, cell // 7))
+        width, height = text_size(text, scale)
+
+        cx = board.x + board.w // 2
+        y = board.y + board.h // 4
+
+        pad = max(2, cell // 4)
+        plate = Rect(cx - width // 2 - pad, y - pad, width + 2 * pad, height + 2 * pad)
+        region = frame[plate.y : plate.bottom, plate.x : plate.right]
+        region[:] = (region * (1.0 - 0.75 * fade)).astype(frame.dtype)
+
+        color = tuple(int(c * fade) for c in TEXT_HOT)
+        draw_text_centered(frame, text, cx, y, color, scale)
 
     def _panel_lines(self) -> list[PanelLine]:
         """The overlay for the current scene, or nothing while playing."""

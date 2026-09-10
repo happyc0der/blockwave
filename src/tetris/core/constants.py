@@ -264,3 +264,11 @@ LOCK_DELAY_FLOOR_MS = 150.0
 #: How many times a move or rotation may reset the lock delay for one piece.
 #: Without this cap a piece can be juggled above the stack forever.
 MAX_LOCK_RESETS = 15
+
+#: The pause after a line clear, before the stack collapses and the next piece
+#: arrives. This is a real mechanic, not just an animation window — it is a beat
+#: of rest the player gets for clearing, and it is where the clear animation and
+#: its sound live. Shrinks with level so late play keeps its pressure.
+CLEAR_DELAY_START_MS = 400.0
+CLEAR_DELAY_END_MS = 180.0
+CLEAR_DELAY_FLOOR_MS = 150.0

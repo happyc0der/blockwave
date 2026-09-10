@@ -46,6 +46,9 @@ def _shot(args: argparse.Namespace) -> int:
                 break
             engine.step(Action.LEFT if current > target else Action.RIGHT, 0.0)
         engine.step(Action.HARD_DROP, 0.0)
+        # Stepping with dt=0 never advances the line-clear pause, so skip it
+        # explicitly rather than stalling on a board with no active piece.
+        engine.finish_clear()
         if engine.game_over:
             engine.reset()
 

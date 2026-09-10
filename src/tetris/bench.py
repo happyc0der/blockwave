@@ -72,6 +72,7 @@ def render_frames_per_second(profile: str, cell_px: int, frames: int = 300, seed
                 break
             engine.step(Action.LEFT if current > target else Action.RIGHT, 0.0)
         engine.step(Action.HARD_DROP, 0.0)
+        engine.finish_clear()  # dt=0 never advances the clear pause
         if engine.game_over:
             engine.reset(seed=seed)
 

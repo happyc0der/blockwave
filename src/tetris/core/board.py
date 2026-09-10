@@ -68,6 +68,19 @@ class Board:
             rows[y] |= 1 << x
             colors[y, x] = value
 
+    def blank_rows(self, ys: list[int]) -> None:
+        """Empty the given rows in place, leaving the stack above where it is.
+
+        This is the first half of a line clear. Splitting it from the collapse
+        is what makes the clear *animation* possible: the rows sit visibly empty
+        for the duration of the clear delay, and only then does everything above
+        fall. It also keeps :meth:`check_invariants` honest, because no full row
+        is ever left sitting uncollapsed.
+        """
+        for y in ys:
+            self.rows[y] = 0
+            self.colors[y, :] = 0
+
     def clear_rows(self, ys: list[int]) -> None:
         """Remove the given rows and drop everything above them down.
 

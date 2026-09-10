@@ -32,6 +32,7 @@ from .piece import (
 from .randomizer import SevenBag
 from .rules import (
     HARD_DROP_POINTS,
+    clear_delay_ms,
     SOFT_DROP_POINTS,
     TSpin,
     detect_tspin,
@@ -105,6 +106,8 @@ class TetrisEngine:
         self._lock_resets = 0
         self._last_move_was_rotation = False
         self._last_kick_index = -1
+        self._pending_collapse: list[int] = []
+        self._clear_timer = 0.0
 
         self.piece = None
         return self._spawn()
@@ -119,10 +122,21 @@ class TetrisEngine:
         the very last tick of lock delay gets the placement, which is the
         behaviour that makes the game feel fair.
         """
-        if self.game_over or self.piece is None:
+        if self.game_over:
             return []
 
         events: list[GameEvent] = []
+
+        # A line clear is a pause: the rows sit empty, no piece is in play, and
+        # the only thing advancing is the clear timer. Input is ignored for its
+        # duration, which is the beat of rest the player earned.
+        if self._pending_collapse:
+            self._advance_clear(dt, events)
+            return events
+
+        if self.piece is None:
+            return events
+
         self._apply_action(Action(action), events)
 
         # A hard drop locks the piece and spawns the next one immediately, so
@@ -279,7 +293,9 @@ class TetrisEngine:
         events.append(GameEvent(EventType.PIECE_LOCK, int(piece.type)))
 
         full = self.board.full_rows()
-        self.board.clear_rows(full)
+        # Empty the rows now, collapse them after the clear delay. Scoring still
+        # happens immediately, so the player is paid at the moment of the lock.
+        self.board.blank_rows(full)
         lines = len(full)
         perfect = lines > 0 and not any(self.board.rows)
 
@@ -306,7 +322,7 @@ class TetrisEngine:
             stats.line_clears[lines] += 1
             if lines == 4:
                 stats.tetrises += 1
-            events.append(GameEvent(EventType.LINE_CLEAR, lines))
+            events.append(GameEvent(EventType.LINE_CLEAR, lines, tuple(full)))
             if outcome.combo > 0:
                 events.append(GameEvent(EventType.COMBO, outcome.combo))
             if outcome.perfect_clear:
@@ -323,7 +339,64 @@ class TetrisEngine:
             return
 
         self.hold_used = False
+
+        if full:
+            # Hold the board here: no active piece, rows sitting empty, until
+            # the clear delay expires.
+            self._pending_collapse = full
+            self._clear_timer = 0.0
+            self.piece = None
+        else:
+            self._spawn(events)
+
+    # -- the line-clear pause ---------------------------------------------
+
+    def _advance_clear(self, dt: float, events: list[GameEvent]) -> None:
+        self._clear_timer += dt * 1000.0
+        if self._clear_timer >= clear_delay_ms(self.stats.level):
+            self._collapse(events)
+
+    def _collapse(self, events: list[GameEvent]) -> None:
+        rows = self._pending_collapse
+        self._pending_collapse = []
+        self._clear_timer = 0.0
+        self.board.clear_rows(rows)
         self._spawn(events)
+
+    def finish_clear(self) -> list[GameEvent]:
+        """Complete a pending clear immediately, skipping the pause.
+
+        For tools and tests that step with ``dt=0`` and would otherwise sit
+        forever on a board with no active piece.
+        """
+        events: list[GameEvent] = []
+        if self._pending_collapse:
+            self._collapse(events)
+        return events
+
+    @property
+    def clearing_rows(self) -> tuple[int, ...]:
+        """Rows currently sitting empty, waiting to collapse."""
+        return tuple(self._pending_collapse)
+
+    @property
+    def clear_progress(self) -> float:
+        """How far through the clear pause we are, 0 to 1."""
+        if not self._pending_collapse:
+            return 0.0
+        return min(1.0, self._clear_timer / clear_delay_ms(self.stats.level))
+
+    @property
+    def lock_progress(self) -> float:
+        """How far through the lock delay the active piece is, 0 to 1.
+
+        Drives the visual pulse that tells the player how long they have left —
+        the most timing-sensitive moment in the game, and one with no feedback
+        at all before this.
+        """
+        if self.piece is None or self._lock_timer <= 0.0:
+            return 0.0
+        return min(1.0, self._lock_timer / lock_delay_ms(self.stats.level))
 
     # -- spawning ---------------------------------------------------------
 

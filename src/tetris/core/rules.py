@@ -11,6 +11,9 @@ from enum import IntEnum
 
 from .board import Board
 from .constants import (
+    CLEAR_DELAY_END_MS,
+    CLEAR_DELAY_FLOOR_MS,
+    CLEAR_DELAY_START_MS,
     GRAVITY_BASE,
     GRAVITY_DECAY,
     INSTANT_GRAVITY_THRESHOLD,
@@ -54,6 +57,18 @@ def gravity_seconds_per_row(level: int) -> float:
     if seconds <= INSTANT_GRAVITY_THRESHOLD:
         return 0.0
     return seconds
+
+
+def clear_delay_ms(level: int) -> float:
+    """How long the board pauses after a line clear, in milliseconds.
+
+    Shrinks on the same schedule as the lock delay, so the rhythm of the game
+    tightens as a whole rather than one timing lagging behind the other.
+    """
+    span = MAX_GRAVITY_LEVEL - 1
+    per_level = (CLEAR_DELAY_START_MS - CLEAR_DELAY_END_MS) / span
+    value = CLEAR_DELAY_START_MS - (max(1, level) - 1) * per_level
+    return max(CLEAR_DELAY_FLOOR_MS, value)
 
 
 def lock_delay_ms(level: int) -> float:

@@ -63,6 +63,15 @@ WELL_BLEED = 0.06
 #: Ghost piece brightness, as a fraction of the piece's own colour.
 GHOST_ALPHA = 0.26
 
+#: How much brighter the active piece gets at the very end of its lock delay.
+#: Applied against the square of the progress, so the pulse stays subtle until
+#: the last moment and then reads clearly as "this is about to lock".
+LOCK_PULSE_GAIN = 0.85
+
+#: The colour of a clearing row's wipe. Near-white so it reads as a flash of
+#: light rather than as another tetromino.
+CLEAR_FLASH = (255, 245, 235)
+
 
 def fill_rect(frame: np.ndarray, rect: Rect, color: RGB | np.ndarray) -> None:
     frame[rect.y : rect.bottom, rect.x : rect.right] = color
@@ -302,12 +311,60 @@ class Compositor:
             if ghost.any():
                 self._blit_cells(frame, board, ghost, cell, alpha=GHOST_ALPHA, bevel=False)
 
+            active = np.zeros_like(grid)
             for x, y in engine.active_cells():
                 row = y - RENDER_TOP
                 if 0 <= row < RENDER_ROWS:
                     grid[row, x] = int(engine.piece.type)
+                    active[row, x] = int(engine.piece.type)
 
         self._blit_cells(frame, board, grid, cell)
+
+        # The active piece brightens as its lock delay runs out. Before this
+        # there was no feedback at all for the most timing-sensitive moment in
+        # the game — you could not tell a piece about to lock from one that had
+        # just landed.
+        if engine.piece is not None:
+            progress = engine.lock_progress
+            if progress > 0.0:
+                self._blit_cells(
+                    frame, board, active, cell,
+                    alpha=1.0 + LOCK_PULSE_GAIN * progress * progress,
+                )
+
+        if engine.clearing_rows:
+            self._draw_clear_wipe(frame, engine)
+
+    def _draw_clear_wipe(self, frame: np.ndarray, engine: TetrisEngine) -> None:
+        """A bright bar across each cleared row, wiping out from the centre.
+
+        The rows are already empty by the time this runs — the engine blanks
+        them at lock and only collapses the stack once the pause ends, which is
+        precisely the window this animation lives in.
+        """
+        board = self.layout.board
+        cell = self.layout.cell_px
+        progress = engine.clear_progress
+
+        # Full width at the start, closing to nothing by the end.
+        half = int((1.0 - progress) * board.w / 2)
+        if half <= 0:
+            return
+
+        centre = board.x + board.w // 2
+        x0 = max(board.x, centre - half)
+        x1 = min(board.right, centre + half)
+        glow = np.array(CLEAR_FLASH, dtype=np.float32) * (0.35 + 0.65 * (1.0 - progress))
+
+        for row in engine.clearing_rows:
+            y = board.y + (row - RENDER_TOP) * cell
+            if y < board.y or y + cell > board.bottom:
+                continue
+            # A thin core with a softer halo, so it reads as light rather than
+            # as a rectangle someone painted on the board.
+            inset = max(1, cell // 4)
+            frame[y : y + cell, x0:x1] += glow * 0.30
+            frame[y + inset : y + cell - inset, x0:x1] += glow * 0.70
 
     def _blit_cells(
         self,

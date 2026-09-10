@@ -29,13 +29,8 @@ class VisualProfile:
     chromatic: float = 0.0
 
     #: Whole-frame translation on impact. Safe for legibility because it moves
-    #: the board rather than covering it, and it doubles as free
-    #: translation-robustness training for the agent.
+    #: the board rather than covering it.
     shake: float = 0.0
-
-    #: Particle bursts on line clears. Clipped to outside the playfield so they
-    #: never sit on top of a cell.
-    particles: bool = False
 
 
 #: Neon blocks on a dark ground, nothing else. Fast, and useful for isolating
@@ -53,7 +48,7 @@ ARCADE = VisualProfile(
     vignette=0.35,
 )
 
-#: Everything at once. The showpiece, and the hardest robustness evaluation.
+#: Everything at once. The showpiece.
 ARCADE_MAX = VisualProfile(
     name="arcade_max",
     background=True,
@@ -62,7 +57,6 @@ ARCADE_MAX = VisualProfile(
     vignette=0.5,
     chromatic=1.0,
     shake=1.0,
-    particles=True,
 )
 
 PROFILES: dict[str, VisualProfile] = {
