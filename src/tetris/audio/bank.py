@@ -99,7 +99,7 @@ class SoundBank:
         self._sounds: dict[str, object] = {}
         self._channels: list[object] = []
         self._playing: dict[int, int] = {}  # channel index -> priority
-        self._music_band: int | None = None
+        self._music_track: str | None = None
 
         if enabled:
             self._start()
@@ -203,11 +203,15 @@ class SoundBank:
 
     # -- music ------------------------------------------------------------
 
-    def play_music(self, band: int, volume: float = 0.35) -> None:
-        """Start (or switch to) the loop for a tempo band."""
-        if not self.enabled or band == self._music_band:
+    def play_music(self, track: str, volume: float = 0.35) -> None:
+        """Start (or switch to) a named loop, e.g. ``"menu"`` or ``"0"``.
+
+        A no-op when the requested track is already playing, so the caller can
+        drive this from a scene change every frame without restarting the bar.
+        """
+        if not self.enabled or track == self._music_track:
             return
-        path = self.directory / f"music_{band}.wav"
+        path = self.directory / f"music_{track}.wav"
         if not path.is_file():
             return
         try:
@@ -216,9 +220,9 @@ class SoundBank:
             pygame.mixer.music.load(str(path))
             pygame.mixer.music.set_volume(volume)
             pygame.mixer.music.play(-1)
-            self._music_band = band
+            self._music_track = track
         except Exception:
-            self._music_band = None
+            self._music_track = None
 
     def pause_music(self) -> None:
         """Hold the loop where it is, so resuming does not restart the bar."""
@@ -250,7 +254,7 @@ class SoundBank:
             pygame.mixer.music.stop()
         except Exception:
             pass
-        self._music_band = None
+        self._music_track = None
 
     def close(self) -> None:
         if not self.enabled:

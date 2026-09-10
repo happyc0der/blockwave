@@ -28,6 +28,13 @@ def generate(directory: Path | None = None, *, music: bool = True, quiet: bool =
             print(f"  {name:<16} {seconds * 1000:6.0f} ms")
 
     if music:
+        menu = directory / "music_menu.wav"
+        synth.write_wav(menu, synth.build_menu_music())
+        written.append(menu)
+        if not quiet:
+            seconds = menu.stat().st_size / (synth.SAMPLE_RATE * 2)
+            print(f"  music_menu       {seconds:6.2f} s   {synth.MENU_BPM:.0f} bpm")
+
         for band in range(len(synth.TEMPO_BANDS)):
             path = directory / f"music_{band}.wav"
             samples = synth.build_music(band)

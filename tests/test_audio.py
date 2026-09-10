@@ -110,6 +110,43 @@ def test_higher_bands_are_shorter():
     assert all(b < a for a, b in zip(lengths, lengths[1:])), "tempo should rise"
 
 
+def test_menu_music_loops_without_a_click():
+    track = synth.build_menu_music()
+    assert abs(track[0] - track[-1]) < 0.05
+    assert np.isfinite(track).all()
+    assert abs(track.mean()) < 0.05
+
+
+def test_menu_music_has_no_holes():
+    track = synth.build_menu_music()
+    window = synth.SAMPLE_RATE // 4
+    envelope = np.abs(track[: len(track) // window * window].reshape(-1, window)).max(axis=1)
+    assert envelope.min() > 0.02
+
+
+def test_menu_music_is_calmer_than_the_game_loop():
+    """The menu should not just be the game track with the drums removed.
+
+    Measured as onset density: the game loop is a sixteenth-note arpeggio and
+    spikes constantly, while the menu is long pad swells. If these converge,
+    the menu has lost the point of being a separate piece.
+    """
+    menu = synth.build_menu_music()
+    game = synth.build_music(0)
+
+    def onsets(track: np.ndarray) -> float:
+        window = synth.SAMPLE_RATE // 40
+        envelope = np.abs(track[: len(track) // window * window].reshape(-1, window)).max(axis=1)
+        rises = np.diff(envelope)
+        return float((rises > 0.12).mean())
+
+    assert onsets(menu) < onsets(game), "the menu track is as busy as the game track"
+
+
+def test_menu_music_is_slower():
+    assert synth.MENU_BPM < synth.BASE_BPM
+
+
 def test_tempo_band_rises_with_level():
     assert synth.tempo_band(1) == 0
     assert synth.tempo_band(6) == 1
@@ -129,6 +166,21 @@ def test_generate_writes_playable_wavs(tmp_path):
             assert handle.getsampwidth() == 2
             assert handle.getframerate() == synth.SAMPLE_RATE
             assert handle.getnframes() > 0
+
+
+def test_generate_writes_every_music_track(tmp_path):
+    generate(tmp_path, music=True, quiet=True)
+    expected = {"music_menu"} | {f"music_{b}" for b in range(len(synth.TEMPO_BANDS))}
+    written = {p.stem for p in tmp_path.glob("music_*.wav")}
+    assert expected == written
+
+
+def test_music_files_are_not_loaded_as_effects(tmp_path):
+    # The bank globs *.wav for effects; music must not end up in that pool, or
+    # a stray play("music_0") would fire an eleven-second track on a channel.
+    generate(tmp_path, music=True, quiet=True)
+    bank = SoundBank(tmp_path, enabled=False)
+    assert not any(name.startswith("music") for name in bank._sounds)
 
 
 # -- event mapping --------------------------------------------------------

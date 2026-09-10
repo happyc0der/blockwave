@@ -42,6 +42,15 @@ MAX_FRAME_TIME = 0.25
 #: How long an announcement (level up, T-spin, perfect clear) stays on screen.
 TOAST_SECONDS = 1.2
 
+#: Breathing room between every pair of panel lines, in cells. A line's own
+#: ``gap_before`` stacks on top of this.
+PANEL_LINE_SPACING = 0.30
+
+#: How far a panel may overhang the playfield, in cells per side plus. Lets the
+#: game-over dialog read at a comfortable size instead of being squeezed into
+#: the ten-cell well, while still bounding it well short of the full scene.
+PANEL_OVERHANG_CELLS = 4
+
 
 class Scene(Enum):
     TITLE = auto()
@@ -132,6 +141,7 @@ class Game:
     # -- loop -------------------------------------------------------------
 
     def run(self) -> None:
+        self._sync_music()
         clock = pygame.time.Clock()
         target_fps = refresh_rate(60)
         accumulator = 0.0
@@ -190,7 +200,7 @@ class Game:
                 # Requirement 3 should be felt, not read off a number.
                 self._toast = (f"LEVEL {event.value}", TOAST_SECONDS)
                 self.shake.kick(0.8)
-                self._sync_music(event.value)
+                self._sync_music()
             elif event.type is EventType.TSPIN:
                 self._toast = ("T-SPIN", TOAST_SECONDS * 0.7)
             elif event.type is EventType.PERFECT_CLEAR:
@@ -198,13 +208,22 @@ class Game:
             elif event.type is EventType.GAME_OVER:
                 self._new_record = scores_store.submit(self.scores, self.engine.stats)
                 scores_store.save(self.scores)
-                self.audio.stop_music()
                 self.scene = Scene.GAME_OVER
+                self._sync_music()
 
-    def _sync_music(self, level: int) -> None:
-        """Move the loop to the tempo band this level belongs to."""
-        if self.music_enabled:
-            self.audio.play_music(tempo_band(level))
+    def _sync_music(self) -> None:
+        """Play whatever the current scene calls for.
+
+        Cheap to call every frame: the bank ignores a request for the track it
+        is already playing, so this can be driven straight off scene state
+        rather than from every transition that might change it.
+        """
+        if not self.music_enabled:
+            return
+        if self.scene is Scene.PLAYING:
+            self.audio.play_music(str(tempo_band(self.engine.stats.level)))
+        elif self.scene in (Scene.TITLE, Scene.GAME_OVER):
+            self.audio.play_music("menu")
 
     # -- events -----------------------------------------------------------
 
@@ -237,8 +256,8 @@ class Game:
             elif self.scene is Scene.PAUSED:
                 if key in binds.quit:
                     self.audio.play("menu_back")
-                    self.audio.stop_music()
                     self.scene = Scene.TITLE
+                    self._sync_music()
                 elif key in binds.pause or key in binds.confirm:
                     self.audio.play("menu_select")
                     self.audio.resume_music()
@@ -247,6 +266,7 @@ class Game:
                 if key in binds.quit:
                     self.audio.play("menu_back")
                     self.scene = Scene.TITLE
+                    self._sync_music()
                 elif key in binds.confirm:
                     self._new_game()
 
@@ -264,8 +284,8 @@ class Game:
         self.shake.magnitude = 0.0
         self._new_record = False
         self._toast = None
-        self._sync_music(self.engine.stats.level)
         self.scene = Scene.PLAYING
+        self._sync_music()
 
     # -- presentation -----------------------------------------------------
 
@@ -353,11 +373,60 @@ class Game:
     def _scale_for(self, size: str) -> int:
         cell = self.layout.cell_px
         return {
-            "hero": max(3, cell // 5),
-            "title": max(2, cell // 9),
-            "body": max(1, cell // 12),
-            "label": max(1, cell // 14),
+            "hero": max(4, cell // 4),
+            "title": max(3, cell // 7),
+            "body": max(2, cell // 10),
+            "label": max(2, cell // 13),
         }[size]
+
+    def _layout_panel(
+        self, lines: list[PanelLine]
+    ) -> tuple[Rect, list[tuple[PanelLine, int, Rect]]]:
+        """Measure a panel: the plate, and each line's scale and rect.
+
+        Separated from the drawing so the tests can assert on the geometry the
+        drawer actually uses, rather than reimplementing it and drifting.
+        """
+        board = self.layout.board
+        cell = self.layout.cell_px
+        pad = max(4, cell * 2 // 3)
+
+        # The plate may overhang the board a little — it reads as a proper
+        # dialog rather than something squeezed into the well — but it is
+        # bounded so it can never sprawl across the whole scene.
+        max_plate_w = min(self.layout.width - 2 * cell, board.w + PANEL_OVERHANG_CELLS * cell)
+        max_text_w = max_plate_w - 2 * pad - 2
+        spacing = int(PANEL_LINE_SPACING * cell)
+
+        measured: list[tuple[PanelLine, int, int, int]] = []
+        block_h = 0
+        block_w = 0
+        for index, line in enumerate(lines):
+            scale = fit_scale(line.text, max_text_w, self._scale_for(line.size))
+            width, height = text_size(line.text, scale)
+            gap = spacing + int(line.gap_before * cell) if index else 0
+            measured.append((line, scale, width, height))
+            block_h += gap + height
+            block_w = max(block_w, width)
+
+        plate_w = min(block_w + 2 * pad, max_plate_w)
+        plate = Rect(
+            board.x + (board.w - plate_w) // 2,
+            board.y + (board.h - block_h) // 2 - pad,
+            plate_w,
+            block_h + 2 * pad,
+        )
+
+        cx = board.x + board.w // 2
+        placed: list[tuple[PanelLine, int, Rect]] = []
+        y = plate.y + pad
+        for index, (line, scale, width, height) in enumerate(measured):
+            if index:
+                y += spacing + int(line.gap_before * cell)
+            placed.append((line, scale, Rect(cx - width // 2, y, width, height)))
+            y += height
+
+        return plate, placed
 
     def _draw_panel(self, frame: np.ndarray, lines: list[PanelLine], dim: float = 0.30) -> None:
         """Lay a stack of lines out on a plate centred on the board.
@@ -366,47 +435,18 @@ class Game:
         collide however long the text or however small the cells — which is
         exactly the failure this replaced.
         """
-        board = self.layout.board
+        plate, placed = self._layout_panel(lines)
         cell = self.layout.cell_px
-        pad = max(3, cell // 2)
-        max_text_w = board.w - 2 * pad - 2
-
-        # Measure first: resolve each line's scale, then the block it occupies.
-        measured: list[tuple[PanelLine, int, int, int]] = []
-        block_h = 0
-        block_w = 0
-        for index, line in enumerate(lines):
-            scale = fit_scale(line.text, max_text_w, self._scale_for(line.size))
-            width, height = text_size(line.text, scale)
-            gap = int(line.gap_before * cell) if index else 0
-            measured.append((line, scale, width, height))
-            block_h += gap + height
-            block_w = max(block_w, width)
-
-        # Clamp to the board. The font bottoms out at scale 1, so a line that is
-        # still too wide there would otherwise push the plate out over the side
-        # panels; better to let that one line touch the border than to have the
-        # panel escape the playfield.
-        plate_w = min(block_w + 2 * pad, board.w)
-        plate = Rect(
-            board.x + (board.w - plate_w) // 2,
-            board.y + (board.h - block_h) // 2 - pad,
-            plate_w,
-            block_h + 2 * pad,
-        )
 
         frame[:] = (frame * dim).astype(frame.dtype)
         region = frame[plate.y : plate.bottom, plate.x : plate.right]
         region[:] = (region * 0.35).astype(frame.dtype)
         stroke_rect(frame, plate, CYAN, max(1, cell // 12))
 
-        cx = board.x + board.w // 2
-        y = plate.y + pad
-        for index, (line, scale, _width, height) in enumerate(measured):
-            if index:
-                y += int(line.gap_before * cell)
-            draw_text_centered(frame, line.text, cx, y, line.color, scale)
-            y += height
+        for line, scale, rect in placed:
+            draw_text_centered(
+                frame, line.text, rect.x + rect.w // 2, rect.y, line.color, scale
+            )
 
 
 def main() -> int:

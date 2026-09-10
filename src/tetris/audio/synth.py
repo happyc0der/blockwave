@@ -327,3 +327,67 @@ def build_music(band: int = 0, seed: int = 11) -> np.ndarray:
     # A whisper of noise, the tape hiss the era came with.
     track = track + noise(len(track) / SAMPLE_RATE, rng) * 0.008
     return normalize(track, peak=0.62)
+
+
+#: i - VI - iv - V in D minor: darker and more suspended than the game loop, so
+#: the menu sits somewhere else emotionally rather than sounding like the game
+#: with the drums taken out.
+_MENU_PROGRESSION: tuple[tuple[float, tuple[float, float, float]], ...] = (
+    (-31.0, (-7.0, -3.0, 0.0)),    # Dm
+    (-36.0, (-12.0, -8.0, -5.0)),  # Bb
+    (-33.0, (-9.0, -5.0, -2.0)),   # Gm
+    (-29.0, (-5.0, -1.0, 2.0)),    # A
+)
+
+MENU_BPM = 84.0
+
+
+def build_menu_music(seed: int = 23) -> np.ndarray:
+    """The attract-mode loop: slow, wide and unhurried.
+
+    Deliberately the opposite of the game track. No driving sixteenth arpeggio —
+    a held pad, a sparse bass, and a slow sine melody floating over the top, so
+    the title screen feels like somewhere you can sit rather than somewhere the
+    clock is already running.
+    """
+    rng = np.random.default_rng(seed)
+    beat = 60.0 / MENU_BPM
+    bar = beat * 4.0
+
+    pad_parts: list[np.ndarray] = []
+    bass_parts: list[np.ndarray] = []
+    bell_parts: list[np.ndarray] = []
+
+    #: One note per bar, tracing a slow line over the changes.
+    melody = (0.0, -3.0, -5.0, -7.0)
+
+    for index, (root, chord) in enumerate(_MENU_PROGRESSION):
+        # Pad: the chord held the whole bar, detuned against itself for width.
+        voices = [saw(note(s), bar) for s in chord]
+        voices += [saw(note(s + 0.12), bar) * 0.7 for s in chord]
+        pad_parts.append(
+            mix(*voices) * adsr(bar, attack=0.5, decay=0.3, sustain=0.75, release=0.6) * 0.16
+        )
+
+        # Bass: one long root note per bar, an octave below the game track.
+        bass_parts.append(
+            triangle(note(root), bar) * adsr(bar, 0.05, 0.3, 0.6, 0.5) * 0.55
+        )
+
+        # Bell: a single sine, entering late in the bar and ringing over the change.
+        semitone = melody[index % len(melody)]
+        bell_parts.append(
+            sequence(
+                silence(beat * 2.0),
+                mix(
+                    sine(note(semitone + 12.0), beat * 2.0),
+                    sine(note(semitone + 19.0), beat * 2.0) * 0.35,
+                )
+                * decay_env(beat * 2.0, 1.5)
+                * 0.30,
+            )
+        )
+
+    track = mix(sequence(*pad_parts), sequence(*bass_parts), sequence(*bell_parts))
+    track = track + noise(len(track) / SAMPLE_RATE, rng) * 0.006
+    return normalize(track, peak=0.55)

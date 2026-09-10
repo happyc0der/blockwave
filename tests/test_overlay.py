@@ -34,39 +34,13 @@ def game():
 
 
 def line_rects(game: Game, lines) -> list[tuple[int, int, int, int]]:
-    """Reproduce the layout maths and return each line's (x, y, w, h).
+    """Each line's (x, y, w, h), from the drawer's own layout pass.
 
-    Mirrors ``_draw_panel`` so the assertions below are about the geometry the
-    drawer actually uses.
+    Calls `_layout_panel` rather than reimplementing it, so these assertions
+    can never drift from what actually gets drawn.
     """
-    board = game.layout.board
-    cell = game.layout.cell_px
-    pad = max(3, cell // 2)
-    max_text_w = board.w - 2 * pad - 2
-
-    measured = []
-    block_h = 0
-    block_w = 0
-    for index, line in enumerate(lines):
-        scale = fit_scale(line.text, max_text_w, game._scale_for(line.size))
-        width, height = text_size(line.text, scale)
-        gap = int(line.gap_before * cell) if index else 0
-        measured.append((width, height, gap))
-        block_h += gap + height
-        block_w = max(block_w, width)
-
-    plate_w = min(block_w + 2 * pad, board.w)
-    plate_x = board.x + (board.w - plate_w) // 2
-    plate_y = board.y + (board.h - block_h) // 2 - pad
-
-    cx = board.x + board.w // 2
-    rects = []
-    y = plate_y + pad
-    for width, height, gap in measured:
-        y += gap
-        rects.append((cx - width // 2, y, width, height))
-        y += height
-    return rects
+    _plate, placed = game._layout_panel(lines)
+    return [(r.x, r.y, r.w, r.h) for _line, _scale, r in placed]
 
 
 def overlaps(a, b) -> bool:
@@ -101,19 +75,25 @@ def test_game_over_lines_never_overlap(cell, score):
 @pytest.mark.parametrize(
     "scene", [Scene.TITLE, Scene.PAUSED, Scene.GAME_OVER]
 )
-def test_every_panel_stays_inside_the_board(cell, scene):
+def test_every_panel_stays_inside_its_plate(cell, scene):
     game = Game(seed=1, cell_px=cell)
     try:
         game.scene = scene
         game.engine.stats.score = 128_450
         game.scores.best = 204_900
 
-        board = game.layout.board
-        for x, y, w, h in line_rects(game, game._panel_lines()):
-            assert y >= board.y and y + h <= board.bottom, "panel escaped vertically"
-            # A line may touch the board edge at tiny cell sizes, where the font
-            # cannot shrink below scale 1, but must never leave the playfield.
-            assert x >= board.x - 1 and x + w <= board.right + 1, "panel escaped sideways"
+        lines = game._panel_lines()
+        plate, _ = game._layout_panel(lines)
+
+        # The plate deliberately overhangs the board a little, but must stay
+        # well inside the scene and never reach the window edge.
+        assert plate.x >= game.layout.cell_px - 1
+        assert plate.right <= game.layout.width - game.layout.cell_px + 1
+        assert plate.y >= 0 and plate.bottom <= game.layout.height
+
+        for x, y, w, h in line_rects(game, lines):
+            assert y >= plate.y and y + h <= plate.bottom, "line escaped the plate"
+            assert x >= plate.x - 1 and x + w <= plate.right + 1, "line escaped sideways"
     finally:
         pygame.display.quit()
 
