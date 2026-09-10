@@ -19,3 +19,6 @@ _archive_propaganda_filter/
 # Stray replay recordings
 run.json
 *.replay.json
+
+# Training artifacts
+runs/
