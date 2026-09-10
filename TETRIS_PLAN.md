@@ -1,300 +1,328 @@
-# Tetris Simulator + Visual RL Agent — Plan
+# Finishing the Tetris simulator
+
+> Living plan doc. Steps 0 and 1 are **done** — see the status note at the
+> bottom for what changed and what is next.
 
 ## Context
 
-The goal is a two-step project: **(1)** a solid, bug-free Tetris simulator with a dark 90s Miami Vice arcade presentation, and **(2)** an RL agent that learns to play it from **visual** information only.
+`Basic RL/` originally held an unrelated Chrome extension ("Propaganda Filter for
+X"), now archived in `_archive_propaganda_filter/`. Everything below it is new
+work: a guideline Tetris engine, a Miami Vice renderer, and a playable game.
 
-The premise for this session was that `Basic RL/` held old code for a dead Tetris simulator that needed auditing and repair. **It does not.** The audit found:
+**Scope of this phase — the game, and nothing else.** No RL agent, no Gym
+environment, no observation design, no reward shaping, no domain randomization.
+The agent comes *after* the simulator is finished and needs nothing from us until
+then. Two modules written earlier (`render/randomize.py`, and the `include_hud`
+switch on the compositor) are dormant — they are harmless, they are not built on
+here, and they are not part of this plan's work or its definition of done.
 
-- `Basic RL/` contains a Chrome extension named **"Propaganda Filter for X"** — 9 files (`manifest.json`, `content.js`, `popup.{html,css,js}`, `background.js`, `generate-icons.html`, `README.md`, `ICONS_README.md`). Entirely unrelated to Tetris or RL.
-- No git repository, no hidden files, no stashed work.
-- No audio assets anywhere under `TOFIN/`; no file matching `*tetris*` anywhere under `~/Desktop`.
-- Toolchain: `uv` and miniconda present. System Python is 3.14 with **no** numpy/pygame/gymnasium/torch installed.
+**Done and committed (M0–M3):**
 
-Nothing to salvage or repair. **This is a greenfield build.** The old extension files get archived, not deleted.
+- `core/` — guideline engine, pure Python + numpy, zero pygame. SRS with both
+  kick tables, 7-bag, hold, ghost, lock delay with capped move resets, T-spins,
+  back-to-back, combos. 315k steps/sec, 129 tests green.
+- `render/` — one numpy compositor, dark Miami palette, `flat` / `arcade` /
+  `arcade_max` profiles, procedural 5×7 bitmap font.
+- `app/` — classic controls with DAS 133 ms / ARR 10 ms, 240 Hz fixed-timestep
+  loop decoupled from display refresh.
 
-### Decisions locked in with the user
+**What prompted this round.** Playing it surfaced a visible bug, and an audit
+surfaced a shipped one:
 
-| Decision | Choice |
-|---|---|
-| Stack | Python + `pygame-ce`, Gymnasium-style env API |
-| Ruleset | Modern guideline (SRS + wall kicks, 7-bag, hold, ghost, lock delay) |
-| Audio | Chiptune SFX + BGM synthesized procedurally in numpy, written to `.wav` |
-| Old files | Move to `Basic RL/_archive_propaganda_filter/` |
-| Visuals | **One** renderer, dark UI, Miami Vice palette and fonts, graded effects budget |
+1. **The game-over score is drawn on top of the `GAME OVER` text.** Two separate
+   pieces of code each draw a game-over message and neither knows about the
+   other — `render/compositor.py:373` centres a banner on the **board** (plate
+   spans y 358–423 at `cell=30`); `app/main.py` `_present` centres `SCORE n` on
+   the **frame** (y 405–426). They overlap by 18 px, and the score passes
+   `dim=False` so it also fights the lit board behind it.
+2. **`tetris bench` crashes** — `cli.py:60` imports `tetris.bench`, never written.
+3. `tests/test_perf.py` was promised and never written, so the tick-rate
+   requirement is unguarded.
 
-### Why this stack
+### Against the original seven requirements
 
-Requirement 4 ("information can be fed in easily") and step 2 (learn from pixels) are the binding constraints. A Python engine puts the environment and the torch agent in one process: pixel observations are a numpy slice away, headless training runs fast with no display, and there is no browser bridge to keep in sync. `pygame-ce` (not stock `pygame`) is the maintained fork with better blit performance and current Python support.
-
----
-
-## The visual-fidelity problem, and how this plan resolves it
-
-The agent must be robust to the distortions that naturally occur in the real presentation, but training must stay fast. These pull in opposite directions, and an earlier draft of this plan resolved it badly — by giving the agent a separate sterile renderer. That is wrong: it trains the agent on a distribution it never actually plays in, and any robustness it appears to have is untested.
-
-**The correct resolution is one renderer, one visual language, and three levers.**
-
-### Lever 1 — structural clutter control (the real fix)
-
-Clutter is controlled by *where decoration is allowed to live*, not by turning the art off:
-
-> **Playfield legibility invariant:** decoration renders in the background layer (behind locked cells) or in a global post-process pass (scanlines, vignette, bloom, grade). **Nothing ever occludes an occupied cell**, and playfield contrast never drops below a fixed threshold.
-
-This is enforced by a test, not by discipline (see M2). It means the arcade can look loud while the *information* stays clean — which is exactly the middle ground of "not too much visual clutter". Concretely: particle bursts are clipped to outside the playfield rect or drawn underneath locked cells; the animated sun and grid floor sit behind the board at reduced luminance; the board itself always renders high-contrast neon-on-near-black.
-
-### Lever 2 — `VisualProfile`, a graded effects budget
-
-One code path, one dial:
-
-| Profile | Contents | Use |
+| # | Requirement | State |
 |---|---|---|
-| `flat` | Neon blocks on dark ground. No post-process. | Fast warmup / debugging only |
-| `arcade` | Static scanlines, subtle bloom, dark gradient + dimmed sun/grid, no shake, no particles | **Default for both human play and training** |
-| `arcade_max` | Everything: shake, particles, chromatic aberration, animated background | Showing off, and the hardest robustness eval |
+| 1 | High tick rate | done (240 Hz logic) — needs a perf guard |
+| 2 | Classic controls | done |
+| 3 | Progressively harder | implemented — needs a real playtest pass |
+| 4 | Easy to feed information in | `TetrisEngine.step(action, dt)` + `telemetry()` |
+| 5 | Plays nicely, no bugs | 129 tests; game-over bug open |
+| 6 | 90s Miami Vice arcade UI | looks right; **no animation yet** |
+| 7 | Sound effects | **nothing exists** |
 
-The human and the agent both default to `arcade`. They are looking at the same thing.
-
-### Lever 3 — domain randomization (this is what buys robustness)
-
-Applied per-episode at train time, as cheap numpy ops in the post-process pass: brightness/contrast jitter, hue rotation *within* the Miami palette, scanline phase and intensity jitter, ±2 px board offset, bloom variance, mild sensor noise. Screen shake is deliberately included — it is free translation-robustness training, as long as the board stays fully in frame.
-
-Ramped on a curriculum: near-zero early (fast initial learning), rising as training progresses (robustness). This is the honest answer to "account for natural distortion *and* learn fast" — you get both by ordering them in time, not by splitting the renderer.
-
-### Why this is still fast
-
-Two mechanics do the work:
-
-1. **The compositor is numpy; pygame is only the display path.** Board cells are painted by array slicing; scanlines are a cached 1-D multiply; vignette a cached 2-D multiply; bloom a separable box blur of the bright mask. No pygame surface round-trip in the training loop, and no mixer or window init headless.
-2. **Resolution independence.** All layout is in normalized units. The human window renders at 1080p; the agent's frame renders the *same scene with the same effects* at 168×168 native. Identical visuals, ~40× fewer pixels — the agent never pays for pixels it downsamples away.
-
-Every static layer (background gradient, sun, grid, scanline mask, vignette, per-color glow sprites) is pre-rendered once at init and cached.
+The two real gaps to a finished game are **sound** and **motion** — line clears
+currently blink out instantly, which is the biggest thing standing between this
+and feeling like an arcade cabinet.
 
 ---
 
-## Design principles
+## Step 0 — the game-over panel
 
-**1. The engine knows nothing about pygame.** `core/` is pure Python + numpy — importable, steppable, and testable with no display, no audio device, no window. This is what makes headless training fast and CI possible.
+### Take the banner out of the compositor
 
-**2. One renderer, one truth.** Human and agent see the same scene through the same code, differing only in resolution and profile. See above.
+Delete the `if engine.game_over:` branch and `_draw_banner` from
+`render/compositor.py` (lines 372–395); trim line 30 to
+`from .font import draw_text, draw_text_centered` (`GLYPH_W` and `text_size`
+become unused there — `_stroke` stays, used at 208 and 243).
 
-**3. Logic time is decoupled from render time.** A fixed-timestep accumulator runs logic at 240 Hz; rendering happens at display refresh (vsync). Game feel is identical at 60, 120, or 144 Hz and DAS/ARR timings stay honest. Requirement 1 ("high tick rate") is a high *logic* tick rate, not merely a high frame rate.
+Fixing it here rather than nudging coordinates: title, paused and game over are
+all scene presentation, which already lives in the app layer — this one piece had
+escaped. It also means the compositor draws only the game itself, never a message
+over it.
 
-**4. Effects subscribe to events, never to state.** The engine emits a `GameEvent` stream; audio and effects consume it. Neither ever reaches into engine internals.
-
----
-
-## Visual identity — dark UI, Miami Vice
-
-Single source of truth in `render/palette.py`. Everything is dark; neon is the only bright thing on screen.
-
-| Role | Color |
-|---|---|
-| Ground / void | `#0D0221` near-black indigo |
-| Panel fill | `#1A0B2E` |
-| Panel stroke | neon, 1–2 px, always glowing |
-| Primary | `#FF1E8E` hot magenta |
-| Secondary | `#00F0FF` cyan |
-| Tertiary | `#B026FF` electric purple |
-| Accent | `#FF6B35` sunset orange |
-| Warning / danger | `#FF2E63` |
-
-Tetromino colors are drawn from this palette (not the standard Tetris colors) so the whole board reads as one piece of art, while staying maximally separable in hue for a CNN — deliberately checked as part of the legibility test.
-
-**Fonts.** A **procedurally generated bitmap font atlas**, built at asset-generation time alongside the audio: chunky pixel glyphs, magenta→cyan vertical gradient fill, cyan glow outline, optional chrome bevel for headings. This is self-contained (no font licensing), pixel-crisp at any integer scale, matches the era exactly, and is resolution-independent like the rest of the renderer. A system-monospace chain is the fallback only if the atlas is unavailable.
-
----
-
-## Target structure
-
-```
-Basic RL/
-├── TETRIS_PLAN.md                   # living plan doc (copy of this file)
-├── README.md                        # new: how to run, controls, env API
-├── pyproject.toml                   # uv-managed, Python 3.12
-├── .python-version
-├── _archive_propaganda_filter/      # the 9 old extension files, moved
-├── assets/
-│   ├── sfx/                         # generated .wav files (not committed)
-│   └── fonts/                       # generated bitmap font atlas
-├── src/tetris/
-│   ├── core/                        # PURE LOGIC — no pygame import anywhere
-│   │   ├── constants.py             # piece shapes, SRS kick tables, gravity table
-│   │   ├── board.py                 # bitboard rows, collision, line clear
-│   │   ├── piece.py                 # active piece + rotation state
-│   │   ├── randomizer.py            # 7-bag, seeded
-│   │   ├── rules.py                 # scoring, t-spin, level curve, gravity
-│   │   └── engine.py                # TetrisEngine.step() — single source of truth
-│   ├── env/
-│   │   ├── tetris_env.py            # Gymnasium env wrapping TetrisEngine
-│   │   ├── observations.py          # rgb | grid | features encoders
-│   │   └── wrappers.py              # frame stack, grayscale, resize, reward shaping
-│   ├── render/
-│   │   ├── palette.py               # Miami Vice palette — single source of color
-│   │   ├── profiles.py              # VisualProfile: flat | arcade | arcade_max
-│   │   ├── layout.py                # normalized, resolution-independent layout
-│   │   ├── compositor.py            # numpy scene compositor (shared by both paths)
-│   │   ├── layers.py                # background, board, HUD, foreground layers
-│   │   ├── effects.py               # scanlines, bloom, vignette, shake, particles
-│   │   ├── randomize.py             # domain randomization (train-time)
-│   │   ├── font.py                  # procedural bitmap font atlas + text drawing
-│   │   └── display.py               # pygame window/vsync — display path only
-│   ├── audio/
-│   │   ├── synth.py                 # numpy oscillators + ADSR -> .wav
-│   │   ├── bank.py                  # SoundBank: load, mix, channel priority
-│   │   └── events.py                # GameEvent -> sound mapping
-│   ├── app/
-│   │   ├── input.py                 # DAS/ARR, remappable keybinds
-│   │   ├── scenes.py                # menu / game / pause / game-over
-│   │   └── main.py                  # human-play entry point
-│   └── cli.py                       # play | bench | gen-assets | replay
-└── tests/
-    ├── test_board.py
-    ├── test_srs.py                  # kick-table conformance
-    ├── test_rules.py                # scoring, t-spin, level curve
-    ├── test_engine.py               # lock delay, hold, top-out
-    ├── test_env.py                  # Gym API conformance + determinism
-    ├── test_legibility.py           # THE playfield legibility invariant
-    └── test_perf.py                 # steps/sec floor (guards requirement 1)
-```
-
----
-
-## Milestones
-
-### M0 — Scaffolding
-1. Create `Basic RL/_archive_propaganda_filter/` and move the 9 extension files into it. Nothing deleted.
-2. Copy this plan to `Basic RL/TETRIS_PLAN.md` as the living doc; refine it there as work proceeds.
-3. `uv init` + `uv venv --python 3.12` (3.12 has the most reliable wheels for `pygame-ce` + `torch`; the system 3.14 does not).
-4. `pyproject.toml` deps: `numpy`, `pygame-ce`, `gymnasium`; dev extras `pytest`, `pytest-benchmark`. Torch deferred to step 2.
-5. `git init` — the absence of version control is why the "old code" turned out to be unrecoverable.
-
-**Done when:** `uv run python -c "import pygame; import gymnasium"` succeeds.
-
-### M1 — Pure engine + test suite
-
-The heart of the project. `core/`, zero pygame imports.
-
-**`board.py` — bitboard representation.** The board is a `list[int]` of 20 rows plus buffer rows above, each row a 10-bit integer. Collision is a bitwise AND; a full row is `row == 0b1111111111`; line clear is a list filter. Faster than a 2-D array and much harder to get subtly wrong.
-
-**`constants.py` — the data that must be exactly right.** Piece spawn shapes and orientations, the **JLSTZ kick table** and the **separate I-piece kick table** (O does not kick), and the gravity table.
-
-**`rules.py`**
-- Gravity: `seconds_per_row = (0.8 - (level - 1) * 0.007) ** (level - 1)` for levels 1–15; level 15+ is effectively 20G.
-- Level up every 10 lines cleared — requirement 3, the difficulty curve.
-- Lock delay 500 ms at level 1, shrinking to 200 ms by level 20, floored at 150 ms. This, not gravity alone, is what makes late levels genuinely hard.
-- Scoring: single/double/triple/tetris = 100/300/500/800 × level; T-spin single/double/triple = 800/1200/1600; T-spin mini 100; back-to-back × 1.5; combo 50 × combo × level; soft drop 1/cell, hard drop 2/cell; perfect-clear bonus.
-- T-spin by the 3-corner rule, with the mini distinction from front-corner occupancy and the SRS kick index used.
-
-**`engine.py` — `TetrisEngine.step(action, dt)`.** Actions: `NOOP, LEFT, RIGHT, SOFT_DROP, HARD_DROP, ROT_CW, ROT_CCW, HOLD`. Returns an `EngineState` plus a list of `GameEvent`s.
-
-**Requirement 5 ("plays nicely without bugs") is discharged here**, by testing precisely what classically breaks in Tetris implementations:
-- SRS kicks: all 8 transitions × both tables, including the T-spin-triple kick and I-piece floor kicks.
-- Lock delay **move reset**, capped at 15 resets — otherwise a piece can be held aloft forever.
-- Hold usable exactly once per piece.
-- Both top-out conditions: block out (spawn overlaps) and lock out (piece locks entirely above the ceiling).
-- DAS charge preserved across piece spawn.
-- Line clear interacting with lock in the same tick.
-- Ghost-piece position identical to hard-drop landing position, always.
-
-**Done when:** `pytest` green, and an ASCII debug renderer plays a full game to top-out via scripted actions.
-
-### M2 — Renderer + Gymnasium env
-
-Built together, because the legibility invariant is a property of both.
-
-**Renderer.** `layout.py` defines everything in normalized units. `compositor.py` composites layers in numpy at a requested resolution under a requested `VisualProfile`. `display.py` is the only module that touches a pygame window. `font.py` generates and draws the bitmap font atlas.
-
-**`test_legibility.py` — the invariant, mechanized.** Render a known board state at every profile, every randomization seed, and both resolutions; then run a trivial per-cell dominant-color classifier over the playfield region and assert it recovers the board exactly, with contrast above threshold. **If an effect breaks this test, the effect is wrong — not the test.** This is what makes "low visual clutter" an enforced property instead of an aesthetic opinion, and it is the single most important guard in the project.
-
-**Env — requirement 4, the "feed information in easily" layer:**
+### `fit_scale` in `render/font.py`
 
 ```python
-env = TetrisEnv(obs_type="rgb", profile="arcade", randomize=0.0,
-                render_mode=None, seed=0, start_level=1)
-obs, info = env.reset(seed=0)
-obs, reward, terminated, truncated, info = env.step(action)
+def fit_scale(text: str, max_width: int, preferred: int, tracking: int = 1) -> int:
+    """Largest scale <= preferred whose rendered width fits max_width."""
 ```
 
-- `obs_type="rgb"` — 84×84×3 (configurable) frames from the shared compositor. **Default for step 2.**
-- `obs_type="grid"` — 20×10 binary occupancy + piece one-hots. A cheap non-visual baseline; invaluable for proving the learning code works before blaming the vision stack.
-- `obs_type="features"` — holes, bumpiness, aggregate height, max height. For sanity-checking reward shaping only.
-- `include_hud` — whether next/hold panels are in frame. Default on for next + hold, off for score text (digits are near-useless to a CNN and cost pixels).
+Steps down from `preferred` using the existing `text_size`. Every panel line goes
+through it, so nothing can overflow at any `cell_px` or score magnitude.
 
-`info` carries full telemetry each step: `lines_cleared, level, score, combo, b2b, tspin, holes, bumpiness, aggregate_height, piece_count`.
+### One measured panel drawer in `app/main.py`
 
-`wrappers.py` supplies frame-stacking, grayscale, and resize as composable wrappers. Frame stacking stays **out** of the env, so the env holds no hidden temporal state and stays trivially seedable.
+Replace `_overlay`. The collision happened because both draws hard-coded their own
+centres; laying lines out from a running cursor over measured heights makes
+overlap structurally impossible.
 
-**Determinism is a hard requirement:** same seed + same action sequence + `randomize=0` ⇒ byte-identical observations. With `randomize>0`, the randomization draws from the episode seed, so runs stay reproducible. Tested in `test_env.py`.
+```python
+@dataclass(frozen=True, slots=True)
+class PanelLine:
+    text: str
+    size: str          # "hero" | "title" | "body" | "label"
+    color: RGB
+    gap_before: float = 0.0    # in cell units
+```
 
-**Perf targets** (asserted in `test_perf.py`, so requirement 1 can't silently regress):
-- engine-only `step()`: ≥ 50k steps/sec
-- env, `obs_type="grid"`: ≥ 20k steps/sec
-- env, `obs_type="rgb"`, `profile="arcade"` @168×168: ≥ 2k steps/sec
-- env, `obs_type="rgb"`, `profile="flat"` @168×168: ≥ 8k steps/sec
-- human mode: locked 60 fps render, 240 Hz logic
+`_draw_panel(frame, lines, dim=0.30)` resolves each `size` to a scale
+(`hero = max(3, cell // 5)` down to `label = max(1, cell // 14)`), runs it through
+`fit_scale`, measures the block, dims the frame, fills a plate **centred on
+`layout.board`** (not the frame — that is what kept the old banner off the side
+panels), strokes it neon, then draws top-down from a cursor.
 
-If `arcade` misses 2k/sec, the fix is profiling the compositor (likely the bloom blur) — not falling back to a separate sterile renderer.
+Game over, with the score as the largest element on screen:
 
-### M3 — Playable arcade game
+```
+GAME OVER               title,  magenta
+SCORE                   label,  dim        (gap above)
+128,450                 HERO,   cyan
+NEW RECORD              body,   magenta    (only when beaten)
+BEST 204,900            body,   dim
+LINES 42   LEVEL 5      body,   dim
+ENTER RESTART  Q QUIT   label,  dim        (gap above)
+```
 
-**`app/input.py` — requirement 2, classic controls.** Defaults, all remappable:
+Title and Paused reuse the drawer. Thousands separators throughout.
 
-| Key | Action |
-|---|---|
-| ←/→ | move (DAS 133 ms, ARR 10 ms, both tunable) |
-| ↓ | soft drop |
-| Space | hard drop |
-| ↑ / X | rotate CW |
-| Z / Ctrl | rotate CCW |
-| C / Shift | hold |
-| Esc / P | pause |
+### `app/scores.py` — new
 
-**`app/scenes.py`** — attract/title → menu → game → pause → game over → high scores, as a small scene stack. Dark panels, neon strokes, gradient bitmap type throughout.
+```python
+@dataclass
+class HighScores:
+    best: int = 0
+    best_lines: int = 0
+    best_level: int = 1
+    games: int = 0
 
-**Requirement 6 — the presentation.** Sunset-with-horizontal-slits sun behind an animated perspective grid floor, both dimmed and strictly behind the board. Neon glow on tetromino edges from pre-rendered per-color sprites. Cached scanline and vignette masks. Screen shake on hard drop and tetris; particle bursts and a chromatic-aberration flash on line clear — all clipped so they never occlude a locked cell. Every effect is individually toggleable and lives in the profile table, so the human and agent views stay in sync by construction.
+def load(path: Path | None = None) -> HighScores
+def save(scores: HighScores, path: Path | None = None) -> None
+def submit(scores: HighScores, stats: Stats) -> bool   # True on a new record
+```
 
-### M4 — Procedural chiptune audio
+Stored at `~/.tetris-rl-highscore.json`, not in the repo. **Every read and write
+wrapped in try/except** — a missing, corrupt or unwritable file degrades to an
+in-memory score and the game carries on. Wire into `Game.__init__` (load) and the
+`EventType.GAME_OVER` branch of `_react` (submit, stash `self._new_record`, save).
 
-**`audio/synth.py`** — numpy oscillators (square with duty cycle, saw, triangle, noise), ADSR envelopes, pitch sweeps, written to `assets/sfx/*.wav`. Generated once via `tetris gen-assets` (same command builds the font atlas), then cached. No downloads, no licensing questions, fully tunable.
+### Tests
 
-Sound set: `menu_move`, `menu_select`, `menu_back`, `piece_move`, `piece_rotate`, `piece_lock`, `piece_hold`, `hard_drop`, `line_clear_1/2/3`, `tetris`, `t_spin`, `level_up`, `game_over`, `pause`. Plus a looping synthwave BGM — bassline + arpeggio from a small step sequencer, tempo scaling with level so the music tightens as difficulty rises.
+`tests/test_scores.py` — round-trip via `tmp_path`; missing file yields defaults;
+**corrupt file yields defaults without raising**; `submit` returns True only on a
+genuine beat.
 
-**`audio/bank.py`** — channel allocation and priority so DAS-repeated move blips don't starve line-clear stingers. Missing files degrade to silent no-ops, never a crash. Headless mode initialises no mixer at all.
+`tests/test_overlay.py` — the mechanized version of the bug just found, so it
+cannot return: build the game-over line list across several `cell_px` values and
+scores up to nine digits, then assert **every line's rect is disjoint from every
+other** and all sit inside the plate, which sits inside the board.
 
-### M5 — Polish and hardening
-- **Replay recording**: every run logs `(seed, action, dt)`. A replay reproduces a session exactly — turning "the game glitched" into a reproducible test case, which is the real defence for requirement 5.
-- `--record` flag dumping frames to GIF/MP4.
-- Difficulty-curve tuning pass by playtesting levels 1–20.
-- `README.md`: controls, config, env API, and the visual-profile/randomization knobs.
+---
 
-### M6 — Step 2: the RL agent (sketched; planned properly in its own session)
+## Step 1 — loose ends
 
-M1–M5 are built so this drops in cleanly:
-- Frame-stacked (4×) 84×84 grayscale observations, small CNN encoder.
-- DQN family (Double + Dueling + PER) as baseline; PPO as the alternative.
-- Reward: `lines_cleared ** 2` scaled, small survival bonus, top-out penalty. Optional shaping on holes/bumpiness delta **behind a flag** — it speeds learning a lot but is no longer purely visual learning, so it must be explicit opt-in, never a default.
-- **Two curricula, both already exposed by M2's env config:** difficulty (`start_level`, `gravity_scale`) and visual (`randomize` 0 → 1, `profile` `arcade` → `arcade_max`). Ramp visual randomization only after the agent is reliably clearing lines — that ordering is what delivers fast learning *and* distortion robustness.
-- Validate the training loop on `obs_type="grid"` first. If the agent can't learn from a clean 20×10 grid, the problem is the agent, not the vision stack — that separation saves days of misdirected debugging.
-- **Robustness eval:** train at `randomize=0.5`, evaluate at `arcade_max` with `randomize=1.0`. The gap between those two scores is the honest measure of whether the distortion training worked.
+- **`src/tetris/bench.py`** — the missing module, so `tetris bench` works.
+  `run_benchmarks(steps)` times engine stepping and full-frame rendering at each
+  profile, printing measured rates against targets.
+- **`tests/test_perf.py`** — guard requirement 1: engine ≥ 50k steps/sec
+  (currently 315k) and a full `arcade` frame at human scale comfortably inside a
+  60 Hz budget. Generous thresholds — this catches an order-of-magnitude
+  regression, not noise.
+- **Dead code** — the unused `argv` parameter at `app/main.py:236`; the redundant
+  `engine.stats.level = self._start_level` in `_new_game` (`reset` already applies
+  it from config).
+- **`InputState.on_piece_locked()`** is deliberately a no-op — DAS charge survives
+  a lock by *not* being reset. Add the test that asserts the behaviour its name
+  claims, so the emptiness is verified rather than merely commented.
+- **Reconcile plan with reality** — `app/scenes.py` and `render/layers.py` were
+  folded into `main.py` and `compositor.py`; that was right at this size. Update
+  `TETRIS_PLAN.md` to match rather than creating empty modules.
+
+---
+
+## Step 2 — game feel
+
+The largest gap between this and an arcade cabinet. Lines currently vanish
+between one frame and the next.
+
+### Line-clear delay in the engine
+
+Guideline Tetris pauses ~400 ms on a clear, and that pause is what the animation
+lives in. This is a real gameplay change, so it goes in the engine rather than
+being faked by the renderer.
+
+At lock: award score and count lines immediately (as now), **blank the cleared
+rows but do not collapse them**, and record `_pending_collapse: list[int]` with a
+`_clear_timer`. No piece is active during the delay. When the timer expires the
+stack collapses and the next piece spawns.
+
+Blanking rather than deferring the clear matters: it keeps `Board.check_invariants`
+honest — no full row ever sits uncollapsed — and it is what the player sees
+anyway (the row empties, then the stack falls).
+
+`step()` must advance the clear timer while `piece is None`, which is a change
+from the current early return. `GameEvent` gains an optional
+`rows: tuple[int, ...]` payload so `LINE_CLEAR` can say *which* rows went, which
+the renderer needs. `clear_delay_ms` joins `rules.py` beside the gravity and
+lock-delay curves, shrinking slightly at high level so late play stays tense.
+
+Existing tests that hard-drop and immediately assert `stats.lines` keep passing,
+because scoring still happens at lock; a handful that assume the next piece exists
+immediately after a clearing drop will need a timer advance, which is the correct
+new behaviour.
+
+### Renderer and app
+
+- **Clear flash** — cleared rows blaze white then fall away over the delay.
+- **Collapse** — the stack above eases down rather than snapping.
+- **Lock-delay pulse** — the active piece brightens as its lock timer runs out.
+  Currently there is no feedback at all for the most timing-sensitive moment in
+  the game.
+- **Particles** on clears and **screen shake** already exist for `arcade_max`;
+  wire particles to the clear rows and keep them clipped so they never cover a
+  cell.
+- **Level-up flourish** — a brief banner and a palette pulse, so requirement 3 is
+  something you feel rather than read off a number.
+
+---
+
+## Step 3 — sound
+
+Everything synthesized in numpy — oscillators (square with duty cycle, saw,
+triangle, noise), ADSR envelopes, pitch sweeps — written once to
+`assets/sfx/*.wav` by `tetris gen-assets` and cached. No downloads, no licence to
+track, fully tunable.
+
+Set: `menu_move`, `menu_select`, `menu_back`, `piece_move`, `piece_rotate`,
+`piece_lock`, `piece_hold`, `hard_drop`, `line_clear_1/2/3`, `tetris`, `t_spin`,
+`level_up`, `game_over`, `pause`. Plus a looping synthwave bassline and arpeggio
+whose tempo tightens as the level rises.
+
+`audio/bank.py` handles channel priority so DAS-repeated move blips cannot starve
+a line-clear stinger, degrades to silent no-ops on a missing file, and initialises
+no mixer at all when there is no audio device. It subscribes to the existing
+`GameEvent` stream — no new plumbing, and the clear-delay work in step 2 gives the
+line-clear stinger room to land.
+
+*Risk:* the BGM sequencer is the speculative part. If it does not sound good
+quickly, ship SFX-only and revisit — a bad loop is worse than silence.
+
+---
+
+## Step 4 — finishing
+
+- **Difficulty playtest** — actually play levels 1–20 and tune the gravity and
+  lock-delay curves. Requirement 3 cannot be verified by a unit test.
+- **Attract / title screen** — currently text over a live board; give it a proper
+  layout with the high score and a demo stack.
+- **Replay recording** — log `(seed, action, dt)`. A replay reproduces a session
+  exactly, turning "it glitched" into a reproducible test case, which is the real
+  long-term defence for requirement 5.
+- **`README.md`** — how to run, controls, profiles, and how to drive the engine
+  programmatically (requirement 4).
+
+### Definition of done
+
+Sound on every meaningful event; line clears animate; the difficulty curve has
+been played to level 20 and tuned; `pytest` green; `tetris play`, `tetris shot`
+and `tetris bench` all work; README written. At that point the simulator is
+finished and the agent phase can begin from a stable base.
 
 ---
 
 ## Verification
 
-**Per-milestone gates:**
-- M1: `uv run pytest tests/test_board.py tests/test_srs.py tests/test_rules.py tests/test_engine.py` green. The SRS kick tests matter most.
-- M2: `test_legibility.py` green across all profiles × randomization seeds × resolutions. `test_env.py` green — Gym API conformance and determinism. `uv run tetris bench` meets the steps/sec floors.
-- M3: `uv run tetris play` — I play it directly, drive it via the screenshot tooling, and confirm by screenshot that board, HUD, next/hold, ghost piece, and the dark neon presentation all render correctly. Manual pass: DAS feel, wall kicks against a wall, T-spin, tetris clear, pause/resume, top-out → game over → restart.
-- M4: `uv run tetris gen-assets` writes every wav and the font atlas; play a session and confirm each event fires its sound with no channel starvation and no crackle.
-- M5: record a replay, play it back, assert final state hashes match.
+- `uv run pytest tests/` — 129 existing tests green, plus new score, overlay,
+  perf, clear-delay and input tests.
+- `uv run tetris bench` — runs and prints numbers instead of crashing.
+- `uv run tetris shot /tmp/gameover.png --pieces 40 --seed 4`, then read the PNG:
+  `GAME OVER`, the hero score and the stat lines cleanly separated, score visibly
+  the largest element, plate inside the board.
+- The same panel at `--cell 12` and `--cell 40` and with a forced nine-digit
+  score, confirming `fit_scale` holds at both extremes.
+- Headless (`SDL_VIDEODRIVER=dummy`): play to a game over, confirm the panel
+  renders and the record is written; restart and confirm `BEST` shows it.
+- Delete, then corrupt, `~/.tetris-rl-highscore.json` — the game starts normally
+  both times.
+- Frame-by-frame dump of a line clear, read back as images, to confirm the flash
+  and collapse actually read as motion rather than a stutter.
+- `uv run tetris play` — real games, to a genuine top-out, at low and high level.
 
-**End-to-end:** a scripted 10,000-step random-action headless run with no exception and no state-invariant violation (board never holds a full uncleaned row, piece never overlaps locked cells, score never decreases), then the same seed replayed in human mode producing an identical final score.
-
-**Visual sanity, done honestly:** dump a contact sheet of agent observations at each profile and randomization level. If I can't read the board from the 84×84 frames by eye, neither can a CNN — and that's a bug in the renderer, caught before a single training run is wasted on it.
 
 ---
 
-## Open item
+## Status — steps 0 and 1 complete
 
-**BGM scope.** The procedural sequencer is the most speculative piece of M4. If it doesn't sound good quickly, ship SFX-only and revisit — the SFX carry most of the arcade feel, and a bad loop is worse than none.
+**Step 0, the game-over panel.** The `GAME OVER` banner is gone from the
+compositor, which now draws the game and never a message over it. `app/main.py`
+lays every overlay line out from a running cursor over measured heights, so
+lines cannot collide; the score is the `hero` size and dominates the panel.
+`render/font.fit_scale` shrinks any line that would overflow, and the plate is
+clamped to the board. High scores persist via `app/scores.py`, written
+atomically and degrading to an in-memory score on any file problem.
+
+Two bugs surfaced while checking the render:
+
+- the font had **no comma glyph**, so every score rendered as `128?450`. Added
+  `,`, `'` and `%`.
+- the side stats panel did not use `fit_scale`, so adding thousands separators
+  pushed a seven-figure score past the panel edge. It now shrinks to fit.
+
+**Step 1, loose ends.** `src/tetris/bench.py` was missing entirely, so
+`tetris bench` crashed on every invocation — now written and working. Running it
+immediately found a real performance problem: the default `arcade` profile
+rendered at **67 fps**, barely above 60 and dropping frames on a high-refresh
+display. Profiling showed **bloom was 10 ms of a 14 ms frame**, blurring at full
+resolution. Bloom is low-frequency by nature, so it now works on a strided view
+at 1/4 resolution: **67 → 145 fps**, with a mean channel difference of 0.67 and
+no visible change.
+
+Also: `tests/test_perf.py` guards those floors, `tests/test_input.py` covers DAS
+and ARR (including the DAS-charge-survives-a-lock behaviour that
+`on_piece_locked` exists to name), and the dead `argv` parameter and redundant
+level assignment are gone.
+
+Test count: **129 → 193**.
+
+### Structure, as actually built
+
+`app/scenes.py` and `render/layers.py` from the original plan were folded into
+`app/main.py` and `render/compositor.py`. At this size that was the right call —
+scenes are a four-value enum and a line list, and splitting the compositor's
+layers across modules would have meant passing the frame around for no gain.
+Panels now added: `app/scores.py`, `src/tetris/bench.py`.
+
+### Next: step 2, game feel
+
+Line-clear delay in the engine, then the clear flash, collapse animation,
+lock-delay pulse and level-up flourish. Then step 3, sound.

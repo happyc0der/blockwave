@@ -41,7 +41,21 @@ def box_blur(data: np.ndarray, radius: int) -> np.ndarray:
     return _blur1d(_blur1d(data, radius, 0), radius, 1)
 
 
-def bloom(frame: np.ndarray, amount: float, radius: int = 3, threshold: float = 150.0) -> np.ndarray:
+#: Bloom is computed at 1/N resolution. It is a low-frequency effect by nature,
+#: so blurring at full resolution is wasted work — at 720x750 it cost 10 ms of a
+#: 14 ms frame, which left the default profile barely above 60 fps. Working on a
+#: strided view cuts that to roughly a third for no visible difference; the
+#: aliasing the stride introduces is immediately blurred away.
+BLOOM_DOWNSAMPLE = 4
+
+
+def bloom(
+    frame: np.ndarray,
+    amount: float,
+    radius: int = 3,
+    threshold: float = 150.0,
+    downsample: int = BLOOM_DOWNSAMPLE,
+) -> np.ndarray:
     """Bleed light out of the bright neon into the dark ground around it.
 
     Additive, so it can only ever make a cell *more* visible against the
@@ -49,8 +63,18 @@ def bloom(frame: np.ndarray, amount: float, radius: int = 3, threshold: float = 
     """
     if amount <= 0.0:
         return frame
-    bright = np.maximum(frame - threshold, 0.0)
-    return frame + box_blur(bright, radius) * amount
+
+    step = max(1, downsample)
+    if step == 1:
+        return frame + box_blur(np.maximum(frame - threshold, 0.0), radius) * amount
+
+    height, width = frame.shape[:2]
+    # Threshold and blur on the small view, so both passes do 1/step^2 the work.
+    small = np.maximum(frame[::step, ::step] - threshold, 0.0)
+    small = box_blur(small, max(1, radius // step))
+
+    glow = np.repeat(np.repeat(small, step, axis=0), step, axis=1)[:height, :width]
+    return frame + glow * amount
 
 
 def scanlines(frame: np.ndarray, intensity: float, phase: int = 0, period: int = 3) -> np.ndarray:

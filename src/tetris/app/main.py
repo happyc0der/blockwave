@@ -19,11 +19,12 @@ import pygame
 from ..core.constants import Action
 from ..core.engine import EngineConfig, TetrisEngine
 from ..core.events import EventType, GameEvent
-from ..render.compositor import Compositor
+from ..render.compositor import Compositor, stroke_rect
 from ..render.display import Display, refresh_rate
-from ..render.font import GLYPH_W, draw_text_centered, text_size
-from ..render.layout import HUMAN_CELL_PX, Layout
-from ..render.palette import CYAN, TEXT_DIM, TEXT_HOT
+from ..render.font import draw_text_centered, fit_scale, text_size
+from ..render.layout import HUMAN_CELL_PX, Layout, Rect
+from ..render.palette import CYAN, PURPLE, RGB, TEXT_DIM, TEXT_HOT
+from . import scores as scores_store
 from .input import InputConfig, InputState
 
 #: Logic ticks per second. Well above any display rate, so input timing and
@@ -42,6 +43,21 @@ class Scene(Enum):
     PLAYING = auto()
     PAUSED = auto()
     GAME_OVER = auto()
+
+
+@dataclass(frozen=True, slots=True)
+class PanelLine:
+    """One line of an overlay panel.
+
+    ``size`` is a role rather than a number so the panel scales with ``cell_px``
+    and the score can be the visual hero without any call site hard-coding a
+    pixel value.
+    """
+
+    text: str
+    size: str  # "hero" | "title" | "body" | "label"
+    color: RGB
+    gap_before: float = 0.0  # extra space above this line, in cell units
 
 
 @dataclass(slots=True)
@@ -99,6 +115,9 @@ class Game:
         self.running = True
         self._start_level = start_level
 
+        self.scores = scores_store.load()
+        self._new_record = False
+
     # -- loop -------------------------------------------------------------
 
     def run(self) -> None:
@@ -153,6 +172,8 @@ class Game:
             elif event.type is EventType.PIECE_LOCK:
                 self.input.on_piece_locked()
             elif event.type is EventType.GAME_OVER:
+                self._new_record = scores_store.submit(self.scores, self.engine.stats)
+                scores_store.save(self.scores)
                 self.scene = Scene.GAME_OVER
 
     # -- events -----------------------------------------------------------
@@ -192,10 +213,11 @@ class Game:
                     self._new_game()
 
     def _new_game(self) -> None:
+        # reset() already applies start_level from the engine config.
         self.engine.reset(seed=random.randrange(1 << 30))
-        self.engine.stats.level = self._start_level
         self.input = InputState(self.input.config)
         self.shake.magnitude = 0.0
+        self._new_record = False
         self.scene = Scene.PLAYING
 
     # -- presentation -----------------------------------------------------
@@ -204,36 +226,115 @@ class Game:
         shake = self.shake.offset(self.layout.cell_px * 0.35)
         frame = self.compositor.render(self.engine, shake=shake)
 
-        if self.scene is Scene.TITLE:
-            self._overlay(frame, "TETRIS", "PRESS ENTER", TEXT_HOT)
-        elif self.scene is Scene.PAUSED:
-            self._overlay(frame, "PAUSED", "ENTER TO RESUME", CYAN)
-        elif self.scene is Scene.GAME_OVER:
-            self._overlay(frame, "", f"SCORE {self.engine.stats.score}", TEXT_HOT, dim=False)
+        lines = self._panel_lines()
+        if lines:
+            self._draw_panel(frame, lines)
 
         self.display.present(frame)
 
-    def _overlay(
-        self, frame: np.ndarray, title: str, subtitle: str, color, dim: bool = True
-    ) -> None:
-        height, width = frame.shape[:2]
-        if dim:
-            frame //= 3
+    def _panel_lines(self) -> list[PanelLine]:
+        """The overlay for the current scene, or nothing while playing."""
+        if self.scene is Scene.TITLE:
+            lines = [
+                PanelLine("TETRIS", "hero", TEXT_HOT),
+                PanelLine("MIAMI", "body", PURPLE),
+            ]
+            if self.scores.best:
+                lines.append(PanelLine(f"BEST {self.scores.best:,}", "body", CYAN, 0.5))
+            lines.append(PanelLine("PRESS ENTER", "label", TEXT_DIM, 0.7))
+            return lines
 
-        cx = width // 2
-        cy = height // 2
+        if self.scene is Scene.PAUSED:
+            return [
+                PanelLine("PAUSED", "title", CYAN),
+                PanelLine("ENTER TO RESUME", "label", TEXT_DIM, 0.7),
+                PanelLine("Q TO QUIT", "label", TEXT_DIM),
+            ]
+
+        if self.scene is Scene.GAME_OVER:
+            stats = self.engine.stats
+            lines = [
+                PanelLine("GAME OVER", "title", TEXT_HOT),
+                PanelLine("SCORE", "label", TEXT_DIM, 0.6),
+                # The hero line: the score is the largest thing on screen.
+                PanelLine(f"{stats.score:,}", "hero", CYAN),
+            ]
+            if self._new_record:
+                lines.append(PanelLine("NEW RECORD", "body", TEXT_HOT, 0.3))
+            elif self.scores.best:
+                lines.append(PanelLine(f"BEST {self.scores.best:,}", "body", TEXT_DIM, 0.3))
+            lines.append(
+                PanelLine(f"LINES {stats.lines}  LEVEL {stats.level}", "body", TEXT_DIM, 0.3)
+            )
+            # Two short lines rather than one long one: at small cell sizes a
+            # single 22-character prompt cannot shrink far enough to fit a
+            # 10-cell-wide board, since the font bottoms out at scale 1.
+            lines.append(PanelLine("ENTER RESTART", "label", TEXT_DIM, 0.7))
+            lines.append(PanelLine("Q QUIT", "label", TEXT_DIM))
+            return lines
+
+        return []
+
+    def _scale_for(self, size: str) -> int:
         cell = self.layout.cell_px
+        return {
+            "hero": max(3, cell // 5),
+            "title": max(2, cell // 9),
+            "body": max(1, cell // 12),
+            "label": max(1, cell // 14),
+        }[size]
 
-        if title:
-            scale = max(2, (width // 2) // ((GLYPH_W + 1) * max(1, len(title))))
-            _, th = text_size(title, scale)
-            draw_text_centered(frame, title, cx, cy - th, color, scale)
+    def _draw_panel(self, frame: np.ndarray, lines: list[PanelLine], dim: float = 0.30) -> None:
+        """Lay a stack of lines out on a plate centred on the board.
 
-        sub_scale = max(1, cell // 8)
-        draw_text_centered(frame, subtitle, cx, cy + cell, TEXT_DIM if dim else color, sub_scale)
+        Every line is measured and placed from a running cursor, so lines cannot
+        collide however long the text or however small the cells — which is
+        exactly the failure this replaced.
+        """
+        board = self.layout.board
+        cell = self.layout.cell_px
+        pad = max(3, cell // 2)
+        max_text_w = board.w - 2 * pad - 2
+
+        # Measure first: resolve each line's scale, then the block it occupies.
+        measured: list[tuple[PanelLine, int, int, int]] = []
+        block_h = 0
+        block_w = 0
+        for index, line in enumerate(lines):
+            scale = fit_scale(line.text, max_text_w, self._scale_for(line.size))
+            width, height = text_size(line.text, scale)
+            gap = int(line.gap_before * cell) if index else 0
+            measured.append((line, scale, width, height))
+            block_h += gap + height
+            block_w = max(block_w, width)
+
+        # Clamp to the board. The font bottoms out at scale 1, so a line that is
+        # still too wide there would otherwise push the plate out over the side
+        # panels; better to let that one line touch the border than to have the
+        # panel escape the playfield.
+        plate_w = min(block_w + 2 * pad, board.w)
+        plate = Rect(
+            board.x + (board.w - plate_w) // 2,
+            board.y + (board.h - block_h) // 2 - pad,
+            plate_w,
+            block_h + 2 * pad,
+        )
+
+        frame[:] = (frame * dim).astype(frame.dtype)
+        region = frame[plate.y : plate.bottom, plate.x : plate.right]
+        region[:] = (region * 0.35).astype(frame.dtype)
+        stroke_rect(frame, plate, CYAN, max(1, cell // 12))
+
+        cx = board.x + board.w // 2
+        y = plate.y + pad
+        for index, (line, scale, _width, height) in enumerate(measured):
+            if index:
+                y += int(line.gap_before * cell)
+            draw_text_centered(frame, line.text, cx, y, line.color, scale)
+            y += height
 
 
-def main(argv: list[str] | None = None) -> int:
+def main() -> int:
     Game().run()
     return 0
 

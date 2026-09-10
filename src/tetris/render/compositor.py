@@ -17,6 +17,10 @@ Layer order, and why it makes the legibility invariant structural:
 
 Steps 1 and 2 never change, so they are rendered once and cached; a frame costs
 one array copy plus the cell paint and the post pass.
+
+Note what is *not* here: title, paused and game-over messages. Scene
+presentation belongs to the app layer, which owns the scene state anyway. This
+module draws the game and never a message over it.
 """
 
 from __future__ import annotations
@@ -27,7 +31,7 @@ from ..core.constants import BOARD_WIDTH, TOTAL_HEIGHT, PieceType
 from ..core.constants import SHAPES
 from ..core.engine import TetrisEngine
 from . import effects, randomize
-from .font import GLYPH_W, draw_text, draw_text_centered, text_size
+from .font import draw_text, draw_text_centered, fit_scale
 from .layout import RENDER_ROWS, RENDER_TOP, SPAWN_ROWS_SHOWN, Layout, Rect
 from .palette import (
     CYAN,
@@ -60,11 +64,11 @@ WELL_BLEED = 0.06
 GHOST_ALPHA = 0.26
 
 
-def _fill(frame: np.ndarray, rect: Rect, color: RGB | np.ndarray) -> None:
+def fill_rect(frame: np.ndarray, rect: Rect, color: RGB | np.ndarray) -> None:
     frame[rect.y : rect.bottom, rect.x : rect.right] = color
 
 
-def _stroke(frame: np.ndarray, rect: Rect, color: RGB, width: int = 1) -> None:
+def stroke_rect(frame: np.ndarray, rect: Rect, color: RGB, width: int = 1) -> None:
     frame[rect.y : rect.y + width, rect.x : rect.right] = color
     frame[rect.bottom - width : rect.bottom, rect.x : rect.right] = color
     frame[rect.y : rect.bottom, rect.x : rect.x + width] = color
@@ -202,10 +206,10 @@ class Compositor:
         )
 
         spawn = layout.spawn_zone
-        _fill(frame, spawn, np.array(SPAWN_ZONE, dtype=np.float32) * 0.9)
+        fill_rect(frame, spawn, np.array(SPAWN_ZONE, dtype=np.float32) * 0.9)
 
         self._draw_well_grid(frame)
-        _stroke(frame, board, CYAN, max(1, layout.cell_px // 10))
+        stroke_rect(frame, board, CYAN, max(1, layout.cell_px // 10))
 
         if self.include_hud:
             self._draw_chrome(frame)
@@ -239,8 +243,8 @@ class Compositor:
             (layout.next_panel, "NEXT", CYAN),
             (layout.stats_panel, "", PURPLE),
         ):
-            _fill(frame, rect, panel)
-            _stroke(frame, rect, color, stroke_w)
+            fill_rect(frame, rect, panel)
+            stroke_rect(frame, rect, color, stroke_w)
             if label:
                 draw_text_centered(
                     frame, label, rect.x + rect.w // 2, rect.y + cell // 3, color, label_scale
@@ -354,14 +358,22 @@ class Compositor:
 
         stats = layout.stats_panel
         line_h = 9 * scale
-        y = stats.y + cell // 3
+        inset = cell // 3
+        # Values are shrunk to fit rather than allowed to run past the panel —
+        # a seven-figure score with separators is wider than the panel at the
+        # label's own scale.
+        value_room = stats.w - 2 * inset
+        y = stats.y + inset
         for label, value, color in (
-            ("SCORE", f"{engine.stats.score}", TEXT),
+            ("SCORE", f"{engine.stats.score:,}", TEXT),
             ("LEVEL", f"{engine.stats.level}", TEXT_HOT),
-            ("LINES", f"{engine.stats.lines}", TEXT),
+            ("LINES", f"{engine.stats.lines:,}", TEXT),
         ):
-            draw_text(frame, label, stats.x + cell // 3, y, TEXT_DIM, scale)
-            draw_text(frame, value, stats.x + cell // 3, y + line_h, color, scale)
+            draw_text(frame, label, stats.x + inset, y, TEXT_DIM, scale)
+            draw_text(
+                frame, value, stats.x + inset, y + line_h, color,
+                fit_scale(value, value_room, scale),
+            )
             y += line_h * 2 + scale * 2
 
         if engine.stats.combo > 0:
@@ -369,31 +381,6 @@ class Compositor:
                 frame, f"{engine.stats.combo}x COMBO", layout.width // 2,
                 layout.height - 2 * cell, TEXT_HOT, scale,
             )
-        if engine.game_over:
-            self._draw_banner(frame, "GAME OVER", TEXT_HOT)
-
-    def _draw_banner(self, frame: np.ndarray, text: str, color: RGB) -> None:
-        """A centred message on a dark plate, sized to the board.
-
-        Scaled to fit the playfield rather than the whole scene, so it never
-        sprawls across the side panels.
-        """
-        board = self.layout.board
-        cell = self.layout.cell_px
-
-        scale = max(1, (board.w - cell) // ((GLYPH_W + 1) * len(text)))
-        width, height = text_size(text, scale)
-        cx = board.x + board.w // 2
-        cy = board.y + board.h // 2
-
-        pad = max(2, cell // 2)
-        plate = Rect(cx - width // 2 - pad, cy - height // 2 - pad,
-                     width + 2 * pad, height + 2 * pad)
-        region = frame[plate.y : plate.bottom, plate.x : plate.right]
-        region *= 0.15
-        _stroke(frame, plate, color, max(1, cell // 12))
-        draw_text_centered(frame, text, cx, cy - height // 2, color, scale)
-
     def _draw_mini_piece(
         self, frame: np.ndarray, piece: PieceType, rect: Rect, cell: int, dim: float = 1.0
     ) -> None:

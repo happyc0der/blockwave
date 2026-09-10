@@ -56,6 +56,11 @@ _GLYPHS: dict[str, tuple[int, ...]] = {
     "Z": (0b11111, 0b00001, 0b00010, 0b00100, 0b01000, 0b10000, 0b11111),
     "-": (0b00000, 0b00000, 0b00000, 0b11111, 0b00000, 0b00000, 0b00000),
     ".": (0b00000, 0b00000, 0b00000, 0b00000, 0b00000, 0b01100, 0b01100),
+    # Thousands separators run through here on every score, so a missing comma
+    # showed up as "128?450" on the game-over panel.
+    ",": (0b00000, 0b00000, 0b00000, 0b00000, 0b01100, 0b01100, 0b01000),
+    "'": (0b01100, 0b01100, 0b01000, 0b00000, 0b00000, 0b00000, 0b00000),
+    "%": (0b11001, 0b11010, 0b00010, 0b00100, 0b01000, 0b01011, 0b10011),
     ":": (0b00000, 0b01100, 0b01100, 0b00000, 0b01100, 0b01100, 0b00000),
     "!": (0b00100, 0b00100, 0b00100, 0b00100, 0b00100, 0b00000, 0b00100),
     "/": (0b00001, 0b00010, 0b00010, 0b00100, 0b01000, 0b01000, 0b10000),
@@ -97,6 +102,18 @@ def text_size(text: str, scale: int = 1, tracking: int = 1) -> tuple[int, int]:
         return (0, 0)
     advance = (GLYPH_W + tracking) * scale
     return (advance * len(text) - tracking * scale, GLYPH_H * scale)
+
+
+def fit_scale(text: str, max_width: int, preferred: int, tracking: int = 1) -> int:
+    """The largest scale at or below ``preferred`` whose text fits ``max_width``.
+
+    Every line of a panel goes through this, so a long string — a nine-digit
+    score, say — shrinks to fit rather than running off the edge of its plate.
+    """
+    for scale in range(max(1, preferred), 0, -1):
+        if text_size(text, scale, tracking)[0] <= max_width:
+            return scale
+    return 1
 
 
 def draw_text(
