@@ -389,7 +389,49 @@ Test count: **211 → 247**, checking signal hygiene (finite, no clip, no DC, no
 start click, seamless loops), the event mapping, priority ordering, and that
 every disabled-bank call is inert.
 
-### Next: step 4, finishing
+## Status — step 4 (finishing) complete
 
-Difficulty playtest across levels 1-20, attract screen, particle bursts, replay
-recording, README.
+**Replay recording.** `tetris play --record run.json` writes a session;
+`tetris replay run.json` re-runs it and verifies it against a digest of the
+final board and stats. Recordings are sparse — idle ticks are not stored, so a
+full game is a couple of kilobytes. `apply_tick()` is deliberately shared by the
+live loop and by playback: had each kept its own idea of how a tick is applied,
+a replay could diverge from the session it claims to reproduce, which would be
+worse than having no replay at all.
+
+**Difficulty curve, measured.** No cliffs. The steepest single-level drop in
+time-per-piece is to 73%, a consistent geometric ramp from 18.5 s at level 1 to
+0.20 s at level 20. Gravity becomes instant (20G) at level 18, and that
+transition costs only 21% of the budget rather than being a wall. Levels 25+ are
+flat at the 150 ms floor by design — at that point it is a score run.
+
+*Not verified:* whether the ramp actually **feels** right. That needs a human at
+the keyboard and is the one open item on this plan.
+
+**Particles.** Line clears throw sparks from both edges of each cleared row,
+arcing out under gravity. They are drawn only outside the playfield rect, so
+they cannot occlude a cell by construction rather than by tuning.
+
+**Attract screen.** The title now sits over a decorative stack instead of an
+empty well, with the personal best on the panel.
+
+**README.** Controls, commands, rules, the engine API, the layout and what the
+tests actually cover.
+
+Test count: **253 → 271**.
+
+---
+
+## The simulator is finished
+
+Definition of done from this plan, checked:
+
+- sound on every meaningful event — yes, 20 effects plus 5 music tracks
+- line clears animate — yes, a centre-out wipe over the clear pause
+- difficulty curve measured and free of cliffs — yes; *feel* still needs a human
+- `pytest` green — 271 tests
+- `play`, `shot`, `bench`, `gen-assets` and `replay` all work — yes
+- README written — yes
+
+The agent phase can now begin from a stable base. Nothing in it has been
+designed or built yet, which was deliberate.

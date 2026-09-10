@@ -15,6 +15,7 @@ def _play(args: argparse.Namespace) -> int:
         cell_px=args.cell,
         audio=not args.mute,
         music=not (args.mute or args.no_music),
+        record_to=args.record,
     ).run()
     return 0
 
@@ -74,6 +75,23 @@ def _gen_assets(args: argparse.Namespace) -> int:
     return 0
 
 
+def _replay(args: argparse.Namespace) -> int:
+    """Re-run a recorded session and report whether it reproduces exactly."""
+    from pathlib import Path
+
+    from .app.replay import Replay, verify
+
+    replay = Replay.load(Path(args.file))
+    matched, engine = verify(replay)
+    stats = engine.stats
+
+    print(f"seed {replay.seed}  level {replay.start_level}  {replay.ticks:,} ticks")
+    print(f"  recorded score {replay.score:,}")
+    print(f"  replayed score {stats.score:,}  lines {stats.lines}  pieces {stats.pieces_placed}")
+    print(f"  {'reproduced exactly' if matched else 'DIVERGED from the recording'}")
+    return 0 if matched else 1
+
+
 def _bench(args: argparse.Namespace) -> int:
     from .bench import run_benchmarks
 
@@ -92,6 +110,7 @@ def main(argv: list[str] | None = None) -> int:
     play.add_argument("--cell", type=int, default=30, help="pixels per cell")
     play.add_argument("--mute", action="store_true", help="no sound at all")
     play.add_argument("--no-music", action="store_true", help="sound effects only")
+    play.add_argument("--record", default=None, metavar="FILE", help="write a replay of each game")
     play.set_defaults(func=_play)
 
     shot = sub.add_parser("shot", help="render a still frame to a PNG")
@@ -107,6 +126,10 @@ def main(argv: list[str] | None = None) -> int:
     gen.add_argument("--out", default=None, help="target directory (default: assets/sfx)")
     gen.add_argument("--no-music", action="store_true", help="effects only")
     gen.set_defaults(func=_gen_assets)
+
+    rep = sub.add_parser("replay", help="re-run a recorded session and verify it")
+    rep.add_argument("file")
+    rep.set_defaults(func=_replay)
 
     bench = sub.add_parser("bench", help="measure steps per second")
     bench.add_argument("--steps", type=int, default=20_000)

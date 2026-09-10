@@ -22,12 +22,15 @@ from ..core.events import EventType, GameEvent
 from ..render.compositor import Compositor, stroke_rect
 from ..render.display import Display, refresh_rate
 from ..render.font import draw_text_centered, fit_scale, text_size
-from ..render.layout import HUMAN_CELL_PX, Layout, Rect
+from ..render.layout import HUMAN_CELL_PX, RENDER_TOP, Layout, Rect
 from ..render.palette import CYAN, PURPLE, RGB, TEXT_DIM, TEXT_HOT
+from ..render.compositor import CLEAR_FLASH
 from ..audio.bank import SoundBank
 from ..audio.synth import tempo_band
 from . import scores as scores_store
 from .input import InputConfig, InputState
+from .particles import ParticleField
+from .replay import Recorder, apply_tick
 
 #: Logic ticks per second. Well above any display rate, so input timing and
 #: gravity are sampled far more finely than the eye is refreshed.
@@ -117,6 +120,7 @@ class Game:
         input_config: InputConfig | None = None,
         audio: bool = True,
         music: bool = True,
+        record_to: str | None = None,
     ) -> None:
         pygame.init()
 
@@ -126,6 +130,7 @@ class Game:
         self.display = Display(self.compositor.frame_size[::-1], title="TETRIS // MIAMI")
         self.input = InputState(input_config)
         self.shake = ShakeState()
+        self.particles = ParticleField()
 
         self.scene = Scene.TITLE
         self.running = True
@@ -137,6 +142,41 @@ class Game:
         self.scores = scores_store.load()
         self._new_record = False
         self._toast: tuple[str, float] | None = None
+
+        self._record_to = record_to
+        self._recorder: Recorder | None = None
+
+        self._seed_attract_board()
+
+    def _seed_attract_board(self) -> None:
+        """Leave a plausible stack on the board for the title screen.
+
+        An empty well behind the title reads as "nothing has loaded yet". A
+        stack reads as an arcade cabinet in attract mode. Wiped by
+        ``engine.reset()`` the moment a real game starts.
+        """
+        rng = random.Random(0x5EED)
+        for _ in range(22):
+            for _ in range(rng.randrange(3)):
+                self.engine.step(Action.ROTATE_CW, 0.0)
+            target = rng.randrange(10)
+            for _ in range(10):
+                if self.engine.piece is None:
+                    break
+                current = min(x for x, _ in self.engine.piece.cells())
+                if current == target:
+                    break
+                self.engine.step(
+                    Action.LEFT if current > target else Action.RIGHT, 0.0
+                )
+            self.engine.step(Action.HARD_DROP, 0.0)
+            self.engine.finish_clear()
+            if self.engine.game_over:
+                self.engine.reset()
+        # The attract stack is decoration, not a score.
+        self.engine.stats.score = 0
+        self.engine.stats.lines = 0
+        self.engine.stats.pieces_placed = 0
 
     # -- loop -------------------------------------------------------------
 
@@ -160,6 +200,7 @@ class Game:
                 accumulator = 0.0
 
             self.shake.update(frame_time)
+            self.particles.update(frame_time, self.layout.cell_px)
             self._update_toast(frame_time)
             self._present()
 
@@ -169,19 +210,21 @@ class Game:
     def _tick(self, dt: float, keys) -> None:
         """One fixed logic slice."""
         actions = self.input.poll(dt, keys)
+        if self._recorder is not None:
+            self._recorder.tick(actions)
 
-        if not actions:
-            self._apply(Action.NOOP, dt)
-            return
-
-        # Time passes once per tick no matter how many actions landed in it,
-        # otherwise a burst of auto-repeat would also accelerate gravity.
-        for index, action in enumerate(actions):
-            self._apply(action, dt if index == 0 else 0.0)
-            if self.engine.game_over:
-                break
+        # Deliberately the same function playback uses: if the live loop and a
+        # replay each had their own idea of how a tick is applied, a replay
+        # could quietly diverge from the session it claims to reproduce.
+        events = apply_tick(self.engine, actions, dt)
+        if events:
+            self._react(events)
 
     def _apply(self, action: Action, dt: float) -> None:
+        """Drive a single action outside the fixed-timestep loop.
+
+        Used by tests and tools; the game loop itself goes through _tick.
+        """
         events = self.engine.step(action, dt)
         if events:
             self._react(events)
@@ -194,6 +237,7 @@ class Game:
                 self.shake.kick(0.35)
             elif event.type is EventType.LINE_CLEAR:
                 self.shake.kick(0.5 if event.value < 4 else 1.4)
+                self._spark(event.rows)
             elif event.type is EventType.PIECE_LOCK:
                 self.input.on_piece_locked()
             elif event.type is EventType.LEVEL_UP:
@@ -210,6 +254,30 @@ class Game:
                 scores_store.save(self.scores)
                 self.scene = Scene.GAME_OVER
                 self._sync_music()
+                self._save_recording()
+
+    def _save_recording(self) -> None:
+        """Write the replay of the game that just ended, if recording."""
+        if self._recorder is None or not self._record_to:
+            return
+        from pathlib import Path
+
+        replay = self._recorder.finish(self.engine)
+        try:
+            replay.save(Path(self._record_to))
+            print(f"replay written to {self._record_to} ({replay.ticks} ticks)")
+        except OSError as error:
+            print(f"could not write replay: {error}")
+        self._recorder = None
+
+    def _spark(self, rows: tuple[int, ...]) -> None:
+        """Throw sparks out of the sides of each cleared row."""
+        if not self.compositor.profile.shake or not rows:
+            return
+        cell = self.layout.cell_px
+        board = self.layout.board
+        pixel_rows = [board.y + (row - RENDER_TOP) * cell for row in rows]
+        self.particles.burst(board, cell, pixel_rows, CLEAR_FLASH)
 
     def _sync_music(self) -> None:
         """Play whatever the current scene calls for.
@@ -282,8 +350,13 @@ class Game:
         self.engine.reset(seed=random.randrange(1 << 30))
         self.input = InputState(self.input.config)
         self.shake.magnitude = 0.0
+        self.particles.clear()
         self._new_record = False
         self._toast = None
+        if self._record_to:
+            self._recorder = Recorder(
+                self.engine.config.seed or 0, self.engine.stats.level, LOGIC_DT
+            )
         self.scene = Scene.PLAYING
         self._sync_music()
 
@@ -292,6 +365,8 @@ class Game:
     def _present(self) -> None:
         shake = self.shake.offset(self.layout.cell_px * 0.35)
         frame = self.compositor.render(self.engine, shake=shake)
+
+        self.particles.draw(frame, self.layout.board, self.layout.cell_px)
 
         if self._toast is not None and self.scene is Scene.PLAYING:
             self._draw_toast(frame)
