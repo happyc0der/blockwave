@@ -13,7 +13,7 @@ import random
 
 import pytest
 
-from tetris.app.replay import (
+from blockwave.app.replay import (
     FORMAT_VERSION,
     Recorder,
     Replay,
@@ -22,15 +22,15 @@ from tetris.app.replay import (
     state_digest,
     verify,
 )
-from tetris.core.constants import Action
-from tetris.core.engine import EngineConfig, TetrisEngine
+from blockwave.core.constants import Action
+from blockwave.core.engine import EngineConfig, Engine
 
 DT = 1.0 / 240.0
 
 
-def record_a_game(seed: int = 7, ticks: int = 6_000, density: float = 0.35) -> tuple[Replay, TetrisEngine]:
+def record_a_game(seed: int = 7, ticks: int = 6_000, density: float = 0.35) -> tuple[Replay, Engine]:
     """Play a scripted game through the same path the real loop uses."""
-    engine = TetrisEngine(EngineConfig(seed=seed, start_level=1))
+    engine = Engine(EngineConfig(seed=seed, start_level=1))
     recorder = Recorder(seed, 1, DT)
     rng = random.Random(seed)
 
@@ -130,8 +130,8 @@ def test_recording_stays_small():
 
 def test_time_passes_once_per_tick_regardless_of_action_count():
     """A burst of auto-repeat must not also accelerate gravity."""
-    one = TetrisEngine(EngineConfig(seed=4))
-    many = TetrisEngine(EngineConfig(seed=4))
+    one = Engine(EngineConfig(seed=4))
+    many = Engine(EngineConfig(seed=4))
 
     apply_tick(one, [Action.NOOP], 1.0)
     apply_tick(many, [Action.ROTATE_CW, Action.ROTATE_CCW, Action.ROTATE_CW, Action.ROTATE_CCW], 1.0)
@@ -141,13 +141,13 @@ def test_time_passes_once_per_tick_regardless_of_action_count():
 
 
 def test_apply_tick_returns_the_events_it_produced():
-    engine = TetrisEngine(EngineConfig(seed=4))
+    engine = Engine(EngineConfig(seed=4))
     events = apply_tick(engine, [Action.HARD_DROP], DT)
     assert events, "the game loop needs these for audio and effects"
 
 
 def test_apply_tick_stops_at_game_over():
-    engine = TetrisEngine(EngineConfig(seed=4))
+    engine = Engine(EngineConfig(seed=4))
     engine.game_over = True
     assert apply_tick(engine, [Action.LEFT, Action.RIGHT], DT) == []
 

@@ -9,8 +9,8 @@ os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 
 import pygame  # noqa: E402
 
-from tetris.app.input import InputConfig, InputState  # noqa: E402
-from tetris.core.constants import Action  # noqa: E402
+from blockwave.app.input import InputConfig, InputState  # noqa: E402
+from blockwave.core.constants import Action  # noqa: E402
 
 NO_KEYS = defaultdict(bool)
 
@@ -92,7 +92,7 @@ def test_das_charge_survives_a_piece_lock():
 
     It is deliberately a no-op — the charge is preserved by *not* being reset.
     Without this, holding a direction stalls for a fresh DAS interval on every
-    new piece, which is the most common way a Tetris game feels sluggish.
+    new piece, which is the most common way a falling-block game feels sluggish.
     """
     state = make_input(das=133.0, arr=10.0)
     state.key_down(pygame.K_LEFT)

@@ -20,8 +20,8 @@ os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 
 import pygame  # noqa: E402
 
-from tetris.app.main import Game, Scene  # noqa: E402
-from tetris.render.font import fit_scale, text_size  # noqa: E402
+from blockwave.app.main import Game, Scene  # noqa: E402
+from blockwave.render.font import fit_scale, text_size  # noqa: E402
 
 CELL_SIZES = [12, 20, 30, 40]
 

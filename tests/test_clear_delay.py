@@ -15,8 +15,8 @@ import random
 
 import pytest
 
-from tetris.core.board import Board
-from tetris.core.constants import (
+from blockwave.core.board import Board
+from blockwave.core.constants import (
     CLEAR_DELAY_FLOOR_MS,
     CLEAR_DELAY_START_MS,
     MAX_LOCK_RESETS,
@@ -25,10 +25,10 @@ from tetris.core.constants import (
     Action,
     PieceType,
 )
-from tetris.core.engine import EngineConfig, TetrisEngine
-from tetris.core.events import EventType
-from tetris.core.piece import Piece
-from tetris.core.rules import clear_delay_ms
+from blockwave.core.engine import EngineConfig, Engine
+from blockwave.core.events import EventType
+from blockwave.core.piece import Piece
+from blockwave.core.rules import clear_delay_ms
 
 from helpers import make_board
 
@@ -36,9 +36,9 @@ from helpers import make_board
 GAP_ROW = 0b1111001111
 
 
-def engine_primed_for_a_clear(rows: tuple[int, ...] = (23,), level: int = 1) -> TetrisEngine:
+def engine_primed_for_a_clear(rows: tuple[int, ...] = (23,), level: int = 1) -> Engine:
     """An engine one hard drop away from clearing ``rows``."""
-    engine = TetrisEngine(EngineConfig(seed=1, start_level=level))
+    engine = Engine(EngineConfig(seed=1, start_level=level))
     for y in rows:
         engine.board.rows[y] = GAP_ROW
         for x in (0, 1, 2, 3, 6, 7, 8, 9):
@@ -141,7 +141,7 @@ def test_clear_progress_runs_from_zero_to_one():
 
 
 def test_progress_is_zero_when_nothing_is_clearing():
-    engine = TetrisEngine(EngineConfig(seed=1))
+    engine = Engine(EngineConfig(seed=1))
     assert engine.clear_progress == 0.0
     assert engine.clearing_rows == ()
 
@@ -173,7 +173,7 @@ def test_finish_clear_skips_the_pause():
 
 
 def test_finish_clear_is_a_no_op_when_nothing_is_pending():
-    engine = TetrisEngine(EngineConfig(seed=1))
+    engine = Engine(EngineConfig(seed=1))
     piece = engine.piece
     assert engine.finish_clear() == []
     assert engine.piece is piece
@@ -205,7 +205,7 @@ def test_higher_levels_pause_for_less_time():
 
 
 def test_lock_progress_tracks_the_lock_delay():
-    engine = TetrisEngine(EngineConfig(seed=1))
+    engine = Engine(EngineConfig(seed=1))
     engine.piece = Piece(PieceType.O, x=3, y=22)  # resting on the floor
     engine._lock_timer = 0.0
     assert engine.lock_progress == 0.0
@@ -215,14 +215,14 @@ def test_lock_progress_tracks_the_lock_delay():
 
 
 def test_lock_progress_is_zero_for_a_falling_piece():
-    engine = TetrisEngine(EngineConfig(seed=1))
+    engine = Engine(EngineConfig(seed=1))
     assert engine.lock_progress == 0.0
 
 
 # -- the move-reset budget ------------------------------------------------
 
 
-def exhaust_resets(engine: TetrisEngine) -> None:
+def exhaust_resets(engine: Engine) -> None:
     for index in range(MAX_LOCK_RESETS + 3):
         engine.step(Action.LEFT if index % 2 else Action.RIGHT, 0.001)
 
@@ -234,7 +234,7 @@ def test_descending_to_a_new_row_refills_the_move_budget():
     arrives at the bottom with its budget spent and locks with no chance to
     adjust — punishing a perfectly ordinary maneuver.
     """
-    engine = TetrisEngine(EngineConfig(seed=1))
+    engine = Engine(EngineConfig(seed=1))
     engine.board = make_board(
         "#####.....",
         "..........",
@@ -259,7 +259,7 @@ def test_descending_to_a_new_row_refills_the_move_budget():
 
 
 def test_soft_drop_refills_the_move_budget():
-    engine = TetrisEngine(EngineConfig(seed=1))
+    engine = Engine(EngineConfig(seed=1))
     engine.piece = Piece(PieceType.O, x=3, y=10)
     engine._lowest_row = max(y for _, y in engine.piece.cells())
     engine._lock_resets = 12
@@ -270,7 +270,7 @@ def test_soft_drop_refills_the_move_budget():
 
 def test_moving_sideways_does_not_refill_the_budget():
     # Only *descending* restores it; otherwise the cap would mean nothing.
-    engine = TetrisEngine(EngineConfig(seed=1))
+    engine = Engine(EngineConfig(seed=1))
     engine.piece = Piece(PieceType.O, x=3, y=22)  # on the floor, cannot descend
     engine._lowest_row = max(y for _, y in engine.piece.cells())
     engine._lock_resets = 0
@@ -282,7 +282,7 @@ def test_moving_sideways_does_not_refill_the_budget():
 
 def test_a_floor_bound_piece_still_locks_despite_the_refill():
     """The refill must not reopen the infinite-stall hole the cap closed."""
-    engine = TetrisEngine(EngineConfig(seed=1))
+    engine = Engine(EngineConfig(seed=1))
     engine.piece = Piece(PieceType.O, x=3, y=22)
     engine._lowest_row = max(y for _, y in engine.piece.cells())
     engine._lock_timer = 0.0
@@ -299,7 +299,7 @@ def test_a_floor_bound_piece_still_locks_despite_the_refill():
 
 
 def test_lowest_row_starts_from_the_spawned_piece():
-    engine = TetrisEngine(EngineConfig(seed=1))
+    engine = Engine(EngineConfig(seed=1))
     assert engine.piece is not None
     assert engine._lowest_row == max(y for _, y in engine.piece.cells())
 
@@ -311,7 +311,7 @@ def test_lowest_row_starts_from_the_spawned_piece():
 def test_random_play_with_clears_keeps_invariants(seed):
     """The pause must not let the board reach an inconsistent state."""
     rng = random.Random(seed)
-    engine = TetrisEngine(EngineConfig(seed=seed))
+    engine = Engine(EngineConfig(seed=seed))
     actions = list(Action)
     games = 0
 

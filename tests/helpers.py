@@ -5,8 +5,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from tetris.core.board import Board
-from tetris.core.constants import BOARD_WIDTH, TOTAL_HEIGHT, PieceType
+from blockwave.core.board import Board
+from blockwave.core.constants import BOARD_WIDTH, TOTAL_HEIGHT, PieceType
 
 
 def make_board(*rows: str) -> Board:

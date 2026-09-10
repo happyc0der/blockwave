@@ -1,7 +1,7 @@
 """End-to-end engine behaviour.
 
 These are the tests that discharge requirement 5. Each one targets a specific
-way a Tetris implementation classically goes wrong: pieces that never lock,
+way a falling-block implementation classically goes wrong: pieces that never lock,
 hold used twice, a top-out that is missed, a ghost that lies about where the
 piece will land.
 """
@@ -12,7 +12,7 @@ import random
 
 import pytest
 
-from tetris.core.constants import (
+from blockwave.core.constants import (
     BOARD_WIDTH,
     MAX_LOCK_RESETS,
     TOTAL_HEIGHT,
@@ -20,17 +20,17 @@ from tetris.core.constants import (
     Action,
     PieceType,
 )
-from tetris.core.engine import EngineConfig, TetrisEngine
-from tetris.core.events import EventType
-from tetris.core.piece import Piece, is_grounded
-from tetris.core.rules import lock_delay_ms
+from blockwave.core.engine import EngineConfig, Engine
+from blockwave.core.events import EventType
+from blockwave.core.piece import Piece, is_grounded
+from blockwave.core.rules import lock_delay_ms
 
 from helpers import make_board
 
 
-def make_engine(**kwargs) -> TetrisEngine:
+def make_engine(**kwargs) -> Engine:
     kwargs.setdefault("seed", 12345)
-    return TetrisEngine(EngineConfig(**kwargs))
+    return Engine(EngineConfig(**kwargs))
 
 
 def event_types(events) -> list[EventType]:
@@ -98,7 +98,7 @@ def test_instant_gravity_drops_the_piece_on_spawn():
 # -- lock delay -----------------------------------------------------------
 
 
-def ground_an_o_piece(engine: TetrisEngine) -> None:
+def ground_an_o_piece(engine: Engine) -> None:
     """Park an O piece flat on the floor, ready to lock."""
     engine.piece = Piece(PieceType.O, x=3, y=22)
     engine._lock_timer = 0.0

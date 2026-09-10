@@ -25,12 +25,12 @@ import pytest
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 
-from tetris.core.constants import Action, PieceType  # noqa: E402
-from tetris.core.engine import EngineConfig, TetrisEngine  # noqa: E402
-from tetris.core.piece import Piece  # noqa: E402
-from tetris.render.compositor import Compositor  # noqa: E402
-from tetris.render.layout import Layout  # noqa: E402
-from tetris.render.profiles import (  # noqa: E402
+from blockwave.core.constants import Action, PieceType  # noqa: E402
+from blockwave.core.engine import EngineConfig, Engine  # noqa: E402
+from blockwave.core.piece import Piece  # noqa: E402
+from blockwave.render.compositor import Compositor  # noqa: E402
+from blockwave.render.layout import Layout  # noqa: E402
+from blockwave.render.profiles import (  # noqa: E402
     ARCADE,
     ARCADE_MAX,
     FLAT,
@@ -52,9 +52,9 @@ COMPOSITOR_FIELDS = [
 ]
 
 
-def populated_engine(seed: int = 4) -> TetrisEngine:
+def populated_engine(seed: int = 4) -> Engine:
     """A board with a stack on it, so effects have something to act on."""
-    engine = TetrisEngine(EngineConfig(seed=seed))
+    engine = Engine(EngineConfig(seed=seed))
     for y in (20, 21, 22, 23):
         engine.board.rows[y] = 0b1011011011
         for x in range(10):
@@ -125,7 +125,7 @@ def test_particles_follow_the_profile_flag(name):
     """
     import pygame
 
-    from tetris.app.main import Game
+    from blockwave.app.main import Game
 
     game = Game(seed=1, cell_px=14, profile=name, audio=False)
     try:
@@ -143,7 +143,7 @@ def test_sparks_never_land_inside_the_playfield():
     """The invariant that lets particles exist at all."""
     import pygame
 
-    from tetris.app.main import Game
+    from blockwave.app.main import Game
 
     game = Game(seed=1, cell_px=20, profile="arcade_max", audio=False)
     try:

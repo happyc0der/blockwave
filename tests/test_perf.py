@@ -13,13 +13,13 @@ from __future__ import annotations
 
 import pytest
 
-from tetris.bench import (
+from blockwave.bench import (
     ENGINE_FLOOR_SPS,
     RENDER_FLOOR_FPS,
     engine_steps_per_second,
     render_frames_per_second,
 )
-from tetris.render.layout import HUMAN_CELL_PX
+from blockwave.render.layout import HUMAN_CELL_PX
 
 
 def test_engine_steps_fast_enough():

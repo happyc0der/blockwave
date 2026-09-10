@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from tetris.core.board import Board
-from tetris.core.constants import BOARD_WIDTH, FULL_ROW, TOTAL_HEIGHT, PieceType
+from blockwave.core.board import Board
+from blockwave.core.constants import BOARD_WIDTH, FULL_ROW, TOTAL_HEIGHT, PieceType
 
 from helpers import make_board
 

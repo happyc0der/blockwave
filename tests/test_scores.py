@@ -10,9 +10,9 @@ import json
 
 import pytest
 
-from tetris.app import scores as scores_store
-from tetris.app.scores import HighScores
-from tetris.core.engine import Stats
+from blockwave.app import scores as scores_store
+from blockwave.app.scores import HighScores
+from blockwave.core.engine import Stats
 
 
 def make_stats(score: int, lines: int = 0, level: int = 1) -> Stats:

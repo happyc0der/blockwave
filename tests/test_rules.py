@@ -4,15 +4,15 @@ from __future__ import annotations
 
 import pytest
 
-from tetris.core.constants import (
+from blockwave.core.constants import (
     LINES_PER_LEVEL,
     LOCK_DELAY_FLOOR_MS,
     LOCK_DELAY_START_MS,
     MAX_GRAVITY_LEVEL,
     PieceType,
 )
-from tetris.core.piece import Piece
-from tetris.core.rules import (
+from blockwave.core.piece import Piece
+from blockwave.core.rules import (
     TSpin,
     detect_tspin,
     gravity_seconds_per_row,

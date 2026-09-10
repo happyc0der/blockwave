@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from tetris.core.board import Board
+from blockwave.core.board import Board
 
 
 @pytest.fixture

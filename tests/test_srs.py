@@ -1,6 +1,6 @@
 """SRS rotation and wall kicks.
 
-Getting SRS wrong is the classic way a Tetris implementation feels subtly bad
+Getting SRS wrong is the classic way a falling-block game feels subtly bad
 without ever visibly crashing, so these tests check the kick tables structurally
 *and* exercise real kicks against real boards.
 """
@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import pytest
 
-from tetris.core.board import Board
-from tetris.core.constants import (
+from blockwave.core.board import Board
+from blockwave.core.constants import (
     KICKS_I,
     LAST_KICK_INDEX,
     KICKS_JLSTZ,
@@ -18,7 +18,7 @@ from tetris.core.constants import (
     PieceType,
     kick_table,
 )
-from tetris.core.piece import Piece, try_rotate
+from blockwave.core.piece import Piece, try_rotate
 
 from helpers import make_board
 

@@ -19,10 +19,10 @@ import wave
 import numpy as np
 import pytest
 
-from tetris.audio import synth
-from tetris.audio.bank import PRIORITY, SoundBank, sound_for
-from tetris.audio.generate import generate
-from tetris.core.events import EventType, GameEvent
+from blockwave.audio import synth
+from blockwave.audio.bank import PRIORITY, SoundBank, sound_for
+from blockwave.audio.generate import generate
+from blockwave.core.events import EventType, GameEvent
 
 
 @pytest.fixture(scope="module")
@@ -193,7 +193,7 @@ def test_music_files_are_not_loaded_as_effects(tmp_path):
         (GameEvent(EventType.PIECE_ROTATE, 1), "piece_rotate"),
         (GameEvent(EventType.LINE_CLEAR, 1), "line_clear_1"),
         (GameEvent(EventType.LINE_CLEAR, 3), "line_clear_3"),
-        (GameEvent(EventType.LINE_CLEAR, 4), "tetris"),
+        (GameEvent(EventType.LINE_CLEAR, 4), "quad"),
         (GameEvent(EventType.LEVEL_UP, 5), "level_up"),
         (GameEvent(EventType.GAME_OVER, 0), "game_over"),
     ],
@@ -220,7 +220,7 @@ def test_state_changes_outrank_piece_chatter():
     # Auto-repeat fires a move blip every 10ms; without priority those blips
     # take every channel and the clear stinger is the one that gets dropped.
     assert PRIORITY["line_clear_1"] > PRIORITY["piece_move"]
-    assert PRIORITY["tetris"] > PRIORITY["piece_lock"]
+    assert PRIORITY["quad"] > PRIORITY["piece_lock"]
     assert PRIORITY["game_over"] == max(PRIORITY.values())
 
 
@@ -235,7 +235,7 @@ def test_every_sound_has_a_priority(sounds):
 def test_disabled_bank_is_inert():
     bank = SoundBank(enabled=False)
     assert not bank.enabled
-    assert bank.play("tetris") is False
+    assert bank.play("quad") is False
     # None of these may raise.
     bank.handle([GameEvent(EventType.LINE_CLEAR, 4)])
     bank.play_music(0)
@@ -247,7 +247,7 @@ def test_disabled_bank_is_inert():
 
 def test_missing_sound_directory_does_not_raise(tmp_path):
     bank = SoundBank(tmp_path / "nope", enabled=False)
-    assert bank.play("tetris") is False
+    assert bank.play("quad") is False
     bank.handle([GameEvent(EventType.GAME_OVER, 100)])
 
 

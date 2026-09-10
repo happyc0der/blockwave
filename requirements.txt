@@ -1,0 +1,4 @@
+# Runtime dependencies. Mirrors [project.dependencies] in pyproject.toml.
+#   pip install -r requirements.txt
+numpy>=2.1
+pygame-ce>=2.5

@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+
+    env:
+      # The game is headless in CI: no display, no audio device. The code is
+      # expected to cope with both, so this doubles as a check that it does.
+      SDL_VIDEODRIVER: dummy
+      SDL_AUDIODRIVER: dummy
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install
+        run: uv sync --extra dev --python ${{ matrix.python-version }}
+
+      - name: Tests
+        run: uv run pytest -q
+
+      # No test reads the generated asset directory, so the suite above passes
+      # on a bare clone. This checks the generator itself still works.
+      - name: Generate assets
+        run: uv run blockwave gen-assets
+
+      - name: Render a frame
+        run: uv run blockwave shot /tmp/frame.png --pieces 30
+
+      - name: Throughput floors
+        run: uv run blockwave bench --steps 40000

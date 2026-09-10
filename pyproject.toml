@@ -1,12 +1,27 @@
 [project]
-name = "tetris-rl"
-version = "0.1.0"
-description = "Miami Vice arcade Tetris simulator with a Gymnasium environment for vision-based RL"
+name = "blockwave"
+version = "1.0.0"
+description = "A guideline-compatible falling-block arcade game with a 90s Miami neon presentation"
+readme = "README.md"
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE"]
 requires-python = ">=3.12"
+authors = [{ name = "happyc0der" }]
+keywords = ["game", "arcade", "pygame", "synthwave", "falling-block"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: MacOS X",
+    "Environment :: Win32 (MS Windows)",
+    "Environment :: X11 Applications",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Games/Entertainment :: Puzzle Games",
+]
 dependencies = [
     "numpy>=2.1",
     "pygame-ce>=2.5",
-    "gymnasium>=1.0",
 ]
 
 [project.optional-dependencies]
@@ -15,14 +30,19 @@ dev = [
 ]
 
 [project.scripts]
-tetris = "tetris.cli:main"
+blockwave = "blockwave.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/happyc0der/blockwave"
+Source = "https://github.com/happyc0der/blockwave"
+Issues = "https://github.com/happyc0der/blockwave/issues"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/tetris"]
+packages = ["src/blockwave"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
