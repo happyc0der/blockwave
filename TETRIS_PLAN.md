@@ -353,7 +353,43 @@ Test count: **193 → 211**, with `tests/test_clear_delay.py` covering the pause
 the blanking invariant, input being ignored mid-clear, and a fuzz run asserting
 that no clearing row is ever non-empty.
 
-### Next: step 3, sound
+## Status — step 3 (sound) complete
 
-Then step 4: difficulty playtest, attract screen, particles, replay recording,
-README.
+Every sound is synthesized in numpy and written to `assets/sfx` by
+`tetris gen-assets`: 20 effects plus 4 music loops, 2.7 MB, no downloads and no
+licence to track. The palette is a 90s arcade board's — pulse waves with a duty
+cycle, saw, triangle, white noise — with ADSR and geometric pitch sweeps.
+
+`audio/bank.py` maps the existing `GameEvent` stream to sounds, so no new
+plumbing was needed. It handles channel priority, because auto-repeat fires a
+move blip every 10 ms and a naive bank lets those evict the line-clear stinger —
+the one sound that actually carries information. Verified under load: with move
+blips flooding all 12 channels, 12 of 12 clear stingers still landed.
+
+Music runs in four tempo bands (116 to 165 bpm) that step up every five levels,
+so the track tightens as the stack speeds up.
+
+**Two bugs found by measurement rather than by listening**, which matters
+because I cannot hear the output:
+
+- **DC offset on 11 of 20 sounds.** A pulse wave at 22% duty sits at a mean of
+  -0.56; that thumps at the start and end of every sound and eats headroom.
+  Fixed by centring the oscillator for any duty cycle.
+- **A click at the music loop seam.** The percussive envelope had a truly
+  instant attack, so the loop jumped 0.389 between its last and first sample —
+  once per bar cycle, all session. A 1 ms ramp cut it to 0.011.
+
+Also fixed: `LINE_CLEAR` with a count of zero mapped to a `line_clear_0` sound
+that does not exist, and would have failed silently.
+
+Degradation is total: no device, no files, or a mixer that will not open all
+result in silence, never a crash. `--mute` and `--no-music` are on `tetris play`.
+
+Test count: **211 → 247**, checking signal hygiene (finite, no clip, no DC, no
+start click, seamless loops), the event mapping, priority ordering, and that
+every disabled-bank call is inert.
+
+### Next: step 4, finishing
+
+Difficulty playtest across levels 1-20, attract screen, particle bursts, replay
+recording, README.

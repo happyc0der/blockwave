@@ -13,6 +13,8 @@ def _play(args: argparse.Namespace) -> int:
         start_level=args.level,
         profile=args.profile,
         cell_px=args.cell,
+        audio=not args.mute,
+        music=not (args.mute or args.no_music),
     ).run()
     return 0
 
@@ -59,6 +61,19 @@ def _shot(args: argparse.Namespace) -> int:
     return 0
 
 
+def _gen_assets(args: argparse.Namespace) -> int:
+    from pathlib import Path
+
+    from .audio.generate import generate
+
+    directory = Path(args.out) if args.out else None
+    print("generating sounds...")
+    files = generate(directory, music=not args.no_music)
+    total = sum(path.stat().st_size for path in files)
+    print(f"\nwrote {len(files)} files, {total / 1024:.0f} KB, to {files[0].parent}")
+    return 0
+
+
 def _bench(args: argparse.Namespace) -> int:
     from .bench import run_benchmarks
 
@@ -75,6 +90,8 @@ def main(argv: list[str] | None = None) -> int:
     play.add_argument("--level", type=int, default=1, help="starting level")
     play.add_argument("--profile", default="arcade", choices=["flat", "arcade", "arcade_max"])
     play.add_argument("--cell", type=int, default=30, help="pixels per cell")
+    play.add_argument("--mute", action="store_true", help="no sound at all")
+    play.add_argument("--no-music", action="store_true", help="sound effects only")
     play.set_defaults(func=_play)
 
     shot = sub.add_parser("shot", help="render a still frame to a PNG")
@@ -85,6 +102,11 @@ def main(argv: list[str] | None = None) -> int:
     shot.add_argument("--profile", default="arcade", choices=["flat", "arcade", "arcade_max"])
     shot.add_argument("--cell", type=int, default=30)
     shot.set_defaults(func=_shot)
+
+    gen = sub.add_parser("gen-assets", help="synthesize the sound effects and music")
+    gen.add_argument("--out", default=None, help="target directory (default: assets/sfx)")
+    gen.add_argument("--no-music", action="store_true", help="effects only")
+    gen.set_defaults(func=_gen_assets)
 
     bench = sub.add_parser("bench", help="measure steps per second")
     bench.add_argument("--steps", type=int, default=20_000)

@@ -24,6 +24,8 @@ from ..render.display import Display, refresh_rate
 from ..render.font import draw_text_centered, fit_scale, text_size
 from ..render.layout import HUMAN_CELL_PX, Layout, Rect
 from ..render.palette import CYAN, PURPLE, RGB, TEXT_DIM, TEXT_HOT
+from ..audio.bank import SoundBank
+from ..audio.synth import tempo_band
 from . import scores as scores_store
 from .input import InputConfig, InputState
 
@@ -104,6 +106,8 @@ class Game:
         profile: str = "arcade",
         cell_px: int = HUMAN_CELL_PX,
         input_config: InputConfig | None = None,
+        audio: bool = True,
+        music: bool = True,
     ) -> None:
         pygame.init()
 
@@ -117,6 +121,9 @@ class Game:
         self.scene = Scene.TITLE
         self.running = True
         self._start_level = start_level
+
+        self.audio = SoundBank(enabled=audio)
+        self.music_enabled = music and self.audio.enabled
 
         self.scores = scores_store.load()
         self._new_record = False
@@ -146,6 +153,7 @@ class Game:
             self._update_toast(frame_time)
             self._present()
 
+        self.audio.close()
         pygame.quit()
 
     def _tick(self, dt: float, keys) -> None:
@@ -169,6 +177,8 @@ class Game:
             self._react(events)
 
     def _react(self, events: list[GameEvent]) -> None:
+        self.audio.handle(events)
+
         for event in events:
             if event.type is EventType.HARD_DROP and event.value:
                 self.shake.kick(0.35)
@@ -180,6 +190,7 @@ class Game:
                 # Requirement 3 should be felt, not read off a number.
                 self._toast = (f"LEVEL {event.value}", TOAST_SECONDS)
                 self.shake.kick(0.8)
+                self._sync_music(event.value)
             elif event.type is EventType.TSPIN:
                 self._toast = ("T-SPIN", TOAST_SECONDS * 0.7)
             elif event.type is EventType.PERFECT_CLEAR:
@@ -187,7 +198,13 @@ class Game:
             elif event.type is EventType.GAME_OVER:
                 self._new_record = scores_store.submit(self.scores, self.engine.stats)
                 scores_store.save(self.scores)
+                self.audio.stop_music()
                 self.scene = Scene.GAME_OVER
+
+    def _sync_music(self, level: int) -> None:
+        """Move the loop to the tempo band this level belongs to."""
+        if self.music_enabled:
+            self.audio.play_music(tempo_band(level))
 
     # -- events -----------------------------------------------------------
 
@@ -208,19 +225,27 @@ class Game:
                 if key in binds.quit:
                     self.running = False
                 elif key in binds.confirm:
+                    self.audio.play("menu_select")
                     self._new_game()
             elif self.scene is Scene.PLAYING:
                 if key in binds.pause:
+                    self.audio.play("pause")
+                    self.audio.pause_music()
                     self.scene = Scene.PAUSED
                 else:
                     self.input.key_down(key)
             elif self.scene is Scene.PAUSED:
                 if key in binds.quit:
+                    self.audio.play("menu_back")
+                    self.audio.stop_music()
                     self.scene = Scene.TITLE
                 elif key in binds.pause or key in binds.confirm:
+                    self.audio.play("menu_select")
+                    self.audio.resume_music()
                     self.scene = Scene.PLAYING
             elif self.scene is Scene.GAME_OVER:
                 if key in binds.quit:
+                    self.audio.play("menu_back")
                     self.scene = Scene.TITLE
                 elif key in binds.confirm:
                     self._new_game()
@@ -239,6 +264,7 @@ class Game:
         self.shake.magnitude = 0.0
         self._new_record = False
         self._toast = None
+        self._sync_music(self.engine.stats.level)
         self.scene = Scene.PLAYING
 
     # -- presentation -----------------------------------------------------
