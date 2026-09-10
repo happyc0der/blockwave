@@ -30,7 +30,7 @@ from ..core.constants import BOARD_WIDTH, TOTAL_HEIGHT, PieceType
 from ..core.constants import SHAPES
 from ..core.engine import Engine
 from . import effects
-from .font import draw_text, draw_text_centered, fit_scale
+from .font import draw_text, draw_text_centered, fit_scale, text_size
 from .layout import RENDER_ROWS, RENDER_TOP, SPAWN_ROWS_SHOWN, Layout, Rect
 from .palette import (
     CYAN,
@@ -74,6 +74,18 @@ CLEAR_FLASH = (255, 245, 235)
 
 def fill_rect(frame: np.ndarray, rect: Rect, color: RGB | np.ndarray) -> None:
     frame[rect.y : rect.bottom, rect.x : rect.right] = color
+
+
+def within(frame: np.ndarray, rect: Rect) -> np.ndarray:
+    """A view of ``frame`` restricted to ``rect``.
+
+    Text drawn into the view is clipped to it by ``draw_text``'s own bounds
+    handling, so it is physically unable to escape its panel. Before this, HUD
+    text was laid out for ~30 px cells and simply overflowed at small sizes —
+    at 4 px cells the LINES value landed below its panel, and label fragments
+    spilled into the playfield.
+    """
+    return frame[rect.y : rect.bottom, rect.x : rect.right]
 
 
 def stroke_rect(frame: np.ndarray, rect: Rect, color: RGB, width: int = 1) -> None:
@@ -248,7 +260,7 @@ class Compositor:
             stroke_rect(frame, rect, color, stroke_w)
             if label:
                 draw_text_centered(
-                    frame, label, rect.x + rect.w // 2, rect.y + cell // 3, color, label_scale
+                    within(frame, rect), label, rect.w // 2, cell // 3, color, label_scale
                 )
 
         draw_text_centered(
@@ -399,30 +411,48 @@ class Compositor:
             self._draw_mini_piece(frame, piece, slot, preview_cell, dim=1.0 - index * 0.15)
 
         stats = layout.stats_panel
+        panel_view = within(frame, stats)
         line_h = 9 * scale
         inset = cell // 3
         # Values are shrunk to fit rather than allowed to run past the panel —
         # a seven-figure score with separators is wider than the panel at the
-        # label's own scale.
+        # label's own scale. Everything is also drawn into the panel's view, so
+        # whatever still does not fit is clipped rather than spilled.
         value_room = stats.w - 2 * inset
-        y = stats.y + inset
+        y = inset
         for label, value, color in (
             ("SCORE", f"{engine.stats.score:,}", TEXT),
             ("LEVEL", f"{engine.stats.level}", TEXT_HOT),
             ("LINES", f"{engine.stats.lines:,}", TEXT),
         ):
-            draw_text(frame, label, stats.x + inset, y, TEXT_DIM, scale)
+            draw_text(panel_view, label, inset, y, TEXT_DIM, scale)
             draw_text(
-                frame, value, stats.x + inset, y + line_h, color,
+                panel_view, value, inset, y + line_h, color,
                 fit_scale(value, value_room, scale),
             )
             y += line_h * 2 + scale * 2
 
         if engine.stats.combo > 0:
-            draw_text_centered(
-                frame, f"{engine.stats.combo}x COMBO", layout.width // 2,
-                layout.height - 2 * cell, TEXT_HOT, scale,
-            )
+            self._draw_combo(frame, engine.stats.combo)
+
+    def _draw_combo(self, frame: np.ndarray, combo: int) -> None:
+        """The combo counter, in the footer strip below the playfield.
+
+        It used to be drawn at ``height - 2 * cell``, which is *inside* the
+        board — covering most of the bottom row of blocks at every cell size,
+        contradicting the guarantee that chrome never overlaps a cell. If the
+        text cannot fit the footer at this cell size it is not drawn at all.
+        """
+        footer = self.layout.footer
+        text = f"{combo}x COMBO"
+        scale = fit_scale(text, footer.w, max(1, footer.h // 7))
+        width, height = text_size(text, scale)
+        if height > footer.h:
+            return
+        draw_text(
+            within(frame, footer), text, (footer.w - width) // 2,
+            (footer.h - height) // 2, TEXT_HOT, scale,
+        )
     def _draw_mini_piece(
         self, frame: np.ndarray, piece: PieceType, rect: Rect, cell: int, dim: float = 1.0
     ) -> None:

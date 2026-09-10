@@ -122,6 +122,11 @@ class Layout:
     def header(self) -> Rect:
         return self._rect(0, 0, SCENE_COLS, _HEADER_H)
 
+    @property
+    def footer(self) -> Rect:
+        """The strip below the playfield. Transient messages live here."""
+        return self._rect(0, _HEADER_H + RENDER_ROWS, SCENE_COLS, _FOOTER_H)
+
     def cell(self, col: int, row: int) -> Rect:
         """Pixel rect of one board cell, in *board* row coordinates."""
         board = self.board

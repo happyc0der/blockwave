@@ -28,6 +28,10 @@ dependencies = [
 dev = [
     "pytest>=8.0",
 ]
+# The agent. Kept optional so installing the game never pulls in torch.
+rl = [
+    "torch>=2.4",
+]
 
 [project.scripts]
 blockwave = "blockwave.cli:main"
@@ -42,7 +46,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/blockwave"]
+packages = ["src/blockwave", "src/blockwave_rl"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
