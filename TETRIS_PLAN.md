@@ -435,3 +435,42 @@ Definition of done from this plan, checked:
 
 The agent phase can now begin from a stable base. Nothing in it has been
 designed or built yet, which was deliberate.
+
+
+---
+
+## Audit round (post-playtest)
+
+You asked whether a landed piece staying movable at level 15 was intentional.
+It is: lock delay, guideline Extended Placement. What changes with level is not
+the mechanic but its share of a piece's life — 2.7% at level 1, 68.7% at level
+15, 100% at 18+ once gravity goes instant. Same rule, completely different feel.
+
+The audit found three real bugs.
+
+**1. The move-reset budget never recovered.** Guideline restores the 15-move
+counter when a piece falls below every row it has occupied; ours only reset it
+on spawn. So adjusting a piece on a ledge and then sliding it into a well left
+it with nothing at the bottom. Fixed with `_note_descent()`, called from the
+gravity loop, the soft-drop branch and `_on_successful_move` (an SRS kick can
+push a piece down too).
+
+**2. `profile.shake` was dead config.** Declared, documented, never read — the
+compositor applied whatever offset the app handed it, so `flat` shook exactly as
+hard as `arcade_max`. The compositor now scales by the profile; `arcade` is set
+to full strength so the default feel is unchanged and only the config stops
+lying.
+
+**3. Particles were gated on that dead field**, working only because
+`arcade_max` happened to be the one profile with a nonzero value. Restored a
+real `particles` flag.
+
+Bugs 2 and 3 were the *third* dead-config bug here, so `tests/test_profiles.py`
+now renders every profile field on and off and asserts the frames differ. A
+field that changes no pixel fails immediately.
+
+Clean under audit: no state leaks across `reset()`, the clear pause correctly
+ignores input, 20G never hides the piece, scoring matches guideline, and fuzz
+runs totalling 1.26M ticks across ~4,300 games found nothing.
+
+Test count: **271 → 292**.

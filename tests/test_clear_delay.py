@@ -19,6 +19,7 @@ from tetris.core.board import Board
 from tetris.core.constants import (
     CLEAR_DELAY_FLOOR_MS,
     CLEAR_DELAY_START_MS,
+    MAX_LOCK_RESETS,
     MAX_GRAVITY_LEVEL,
     TOTAL_HEIGHT,
     Action,
@@ -28,6 +29,8 @@ from tetris.core.engine import EngineConfig, TetrisEngine
 from tetris.core.events import EventType
 from tetris.core.piece import Piece
 from tetris.core.rules import clear_delay_ms
+
+from helpers import make_board
 
 #: A row needing only columns 4 and 5 — exactly what one O piece fills.
 GAP_ROW = 0b1111001111
@@ -214,6 +217,91 @@ def test_lock_progress_tracks_the_lock_delay():
 def test_lock_progress_is_zero_for_a_falling_piece():
     engine = TetrisEngine(EngineConfig(seed=1))
     assert engine.lock_progress == 0.0
+
+
+# -- the move-reset budget ------------------------------------------------
+
+
+def exhaust_resets(engine: TetrisEngine) -> None:
+    for index in range(MAX_LOCK_RESETS + 3):
+        engine.step(Action.LEFT if index % 2 else Action.RIGHT, 0.001)
+
+
+def test_descending_to_a_new_row_refills_the_move_budget():
+    """Guideline Extended Placement: a new lowest row restores the counter.
+
+    Without this, a piece adjusted on a ledge and then slid off into a well
+    arrives at the bottom with its budget spent and locks with no chance to
+    adjust — punishing a perfectly ordinary maneuver.
+    """
+    engine = TetrisEngine(EngineConfig(seed=1))
+    engine.board = make_board(
+        "#####.....",
+        "..........",
+        "..........",
+        "..........",
+    )
+    engine.piece = Piece(PieceType.O, x=2, y=18)  # resting on the ledge
+    engine._lowest_row = max(y for _, y in engine.piece.cells())
+
+    exhaust_resets(engine)
+    assert engine._lock_resets == MAX_LOCK_RESETS, "the budget should be spent"
+
+    # Slide off the end of the ledge and let it fall to the floor.
+    for _ in range(6):
+        engine.step(Action.RIGHT, 0.001)
+    for _ in range(400):
+        engine.step(Action.NOOP, 0.01)
+        if engine.piece is None:
+            break
+
+    assert engine._lock_resets == 0, "landing lower must restore the budget"
+
+
+def test_soft_drop_refills_the_move_budget():
+    engine = TetrisEngine(EngineConfig(seed=1))
+    engine.piece = Piece(PieceType.O, x=3, y=10)
+    engine._lowest_row = max(y for _, y in engine.piece.cells())
+    engine._lock_resets = 12
+
+    engine.step(Action.SOFT_DROP, 0.0)
+    assert engine._lock_resets == 0
+
+
+def test_moving_sideways_does_not_refill_the_budget():
+    # Only *descending* restores it; otherwise the cap would mean nothing.
+    engine = TetrisEngine(EngineConfig(seed=1))
+    engine.piece = Piece(PieceType.O, x=3, y=22)  # on the floor, cannot descend
+    engine._lowest_row = max(y for _, y in engine.piece.cells())
+    engine._lock_resets = 0
+
+    engine.step(Action.LEFT, 0.0)
+    engine.step(Action.RIGHT, 0.0)
+    assert engine._lock_resets == 2
+
+
+def test_a_floor_bound_piece_still_locks_despite_the_refill():
+    """The refill must not reopen the infinite-stall hole the cap closed."""
+    engine = TetrisEngine(EngineConfig(seed=1))
+    engine.piece = Piece(PieceType.O, x=3, y=22)
+    engine._lowest_row = max(y for _, y in engine.piece.cells())
+    engine._lock_timer = 0.0
+    engine._lock_resets = 0
+
+    placed = engine.stats.pieces_placed
+    steps = 0
+    while engine.stats.pieces_placed == placed and steps < 500:
+        engine.step(Action.LEFT if steps % 2 else Action.RIGHT, 0.1)
+        steps += 1
+
+    assert engine.stats.pieces_placed == placed + 1, "piece never locked"
+    assert steps <= MAX_LOCK_RESETS + 10
+
+
+def test_lowest_row_starts_from_the_spawned_piece():
+    engine = TetrisEngine(EngineConfig(seed=1))
+    assert engine.piece is not None
+    assert engine._lowest_row == max(y for _, y in engine.piece.cells())
 
 
 # -- fuzz -----------------------------------------------------------------

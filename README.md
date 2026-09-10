@@ -53,9 +53,14 @@ uv run tetris replay FILE
 uv run tetris bench [--steps N]
 ```
 
-**Visual profiles** — `flat` (neon blocks on a dark ground), `arcade` (the
-default: scanlines, bloom, vignette, sun and grid floor) and `arcade_max`
-(everything, plus screen shake, chromatic aberration and particle bursts).
+**Visual profiles** — `flat` (neon blocks on a dark ground, completely still),
+`arcade` (the default: scanlines, bloom, vignette, sun, grid floor and screen
+shake) and `arcade_max` (everything, plus harder shake, chromatic aberration and
+particle bursts on line clears).
+
+Every field on a profile has to visibly change the frame — `tests/test_profiles.py`
+renders each one on and off and asserts the output differs, so a setting that
+does nothing cannot ship.
 
 **`--cell`** sets the pixel size of one board cell; the whole scene is laid out
 in cell units, so this scales the window.
@@ -161,7 +166,7 @@ the engine's `GameEvent` stream. None of them reach into engine internals.
 uv run pytest
 ```
 
-271 tests. The interesting ones are not the happy paths:
+292 tests. The interesting ones are not the happy paths:
 
 - **`test_srs.py`** — kick tables checked structurally (a transition and its
   reverse must negate, candidate for candidate), plus the I-piece floor kick and
@@ -178,6 +183,9 @@ uv run pytest
 - **`test_overlay.py`** — every panel line's rect must be disjoint from every
   other, across cell sizes and nine-digit scores.
 - **`test_replay.py`** — a replay must reproduce its session byte for byte.
+- **`test_profiles.py`** — no profile field may be dead config. Three separate
+  bugs in this project were a setting that was declared, documented and never
+  read by anything; this makes that impossible to ship.
 
 ```bash
 uv run tetris bench

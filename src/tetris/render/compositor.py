@@ -470,8 +470,10 @@ class Compositor:
     ) -> np.ndarray:
         profile = self.profile
 
-        dx = shake[0] + rand.offset_x
-        dy = shake[1] + rand.offset_y
+        # Scaled by the profile, so a profile that declares no shake genuinely
+        # has none. This was previously ignored, and every profile shook.
+        dx = int(round(shake[0] * profile.shake)) + rand.offset_x
+        dy = int(round(shake[1] * profile.shake)) + rand.offset_y
         frame = effects.shake_offset(frame, dx, dy)
 
         if profile.bloom > 0.0:

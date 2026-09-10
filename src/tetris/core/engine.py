@@ -104,6 +104,7 @@ class TetrisEngine:
         self._gravity_accum = 0.0
         self._lock_timer = 0.0
         self._lock_resets = 0
+        self._lowest_row = -1
         self._last_move_was_rotation = False
         self._last_kick_index = -1
         self._pending_collapse: list[int] = []
@@ -175,6 +176,7 @@ class TetrisEngine:
                 self._last_move_was_rotation = False
                 self._last_kick_index = -1
                 self._gravity_accum = 0.0
+                self._note_descent()
                 events.append(GameEvent(EventType.SOFT_DROP))
             return
 
@@ -203,6 +205,24 @@ class TetrisEngine:
         if action is Action.HOLD:
             self._do_hold(events)
 
+    def _note_descent(self) -> None:
+        """Restore the move-reset budget on reaching a new lowest row.
+
+        Guideline Extended Placement resets the fifteen-move counter whenever a
+        piece falls below every row it has previously occupied. Without this, a
+        piece that is adjusted on a ledge and then slides off into a well
+        arrives at the bottom with its whole budget already spent, and locks
+        with no chance to adjust — which punishes a perfectly ordinary
+        maneuver, and bites hardest at high levels where the delay is short.
+        """
+        piece = self.piece
+        if piece is None:
+            return
+        lowest = max(y for _, y in piece.cells())
+        if lowest > self._lowest_row:
+            self._lowest_row = lowest
+            self._lock_resets = 0
+
     def _on_successful_move(self) -> None:
         """Grant a lock-delay reset for a move made while resting on the stack.
 
@@ -212,6 +232,12 @@ class TetrisEngine:
         """
         piece = self.piece
         assert piece is not None
+
+        # Checked first: an SRS kick can push a piece downward, and the budget
+        # a descent grants must not be immediately eaten by the move that
+        # caused it.
+        self._note_descent()
+
         if is_grounded(piece, self.board) and self._lock_resets < MAX_LOCK_RESETS:
             self._lock_timer = 0.0
             self._lock_resets += 1
@@ -251,6 +277,7 @@ class TetrisEngine:
                 piece.y += distance
                 self._last_move_was_rotation = False
                 self._last_kick_index = -1
+                self._note_descent()
             return
 
         self._gravity_accum += dt
@@ -262,6 +289,7 @@ class TetrisEngine:
             # Falling is a translation, so it cancels any pending T-spin.
             self._last_move_was_rotation = False
             self._last_kick_index = -1
+            self._note_descent()
 
     def _apply_lock_delay(self, dt: float, events: list[GameEvent]) -> None:
         piece = self.piece
@@ -414,6 +442,8 @@ class TetrisEngine:
         self._lock_resets = 0
         self._last_move_was_rotation = False
         self._last_kick_index = -1
+        # Where this piece started; descending past it refills the move budget.
+        self._lowest_row = max(y for _, y in self.piece.cells())
 
         # Block out: the new piece has nowhere to appear.
         if self.board.collides(self.piece.cells()):

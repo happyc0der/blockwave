@@ -28,9 +28,14 @@ class VisualProfile:
     vignette: float = 0.0
     chromatic: float = 0.0
 
-    #: Whole-frame translation on impact. Safe for legibility because it moves
-    #: the board rather than covering it.
+    #: Whole-frame translation on impact, as a multiplier on the offset the app
+    #: hands in. Safe for legibility because it moves the board rather than
+    #: covering it.
     shake: float = 0.0
+
+    #: Particle bursts on line clears. Drawn only outside the playfield, so
+    #: they cannot occlude a cell.
+    particles: bool = False
 
 
 #: Neon blocks on a dark ground, nothing else. Fast, and useful for isolating
@@ -46,6 +51,9 @@ ARCADE = VisualProfile(
     scanlines=0.28,
     bloom=0.45,
     vignette=0.35,
+    # Full strength rather than something gentler: this is exactly the shake
+    # the game has always had, since the field used to be ignored entirely.
+    shake=1.0,
 )
 
 #: Everything at once. The showpiece.
@@ -56,7 +64,8 @@ ARCADE_MAX = VisualProfile(
     bloom=0.75,
     vignette=0.5,
     chromatic=1.0,
-    shake=1.0,
+    shake=1.5,
+    particles=True,
 )
 
 PROFILES: dict[str, VisualProfile] = {

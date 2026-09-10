@@ -272,7 +272,7 @@ class Game:
 
     def _spark(self, rows: tuple[int, ...]) -> None:
         """Throw sparks out of the sides of each cleared row."""
-        if not self.compositor.profile.shake or not rows:
+        if not self.compositor.profile.particles or not rows:
             return
         cell = self.layout.cell_px
         board = self.layout.board
