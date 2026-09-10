@@ -230,9 +230,13 @@ def exhaust_resets(engine: Engine) -> None:
 def test_descending_to_a_new_row_refills_the_move_budget():
     """Guideline Extended Placement: a new lowest row restores the counter.
 
-    Without this, a piece adjusted on a ledge and then slid off into a well
-    arrives at the bottom with its budget spent and locks with no chance to
-    adjust — punishing a perfectly ordinary maneuver.
+    The real scenario: adjust a piece on a ledge, then drop it into a well. It
+    should arrive at the bottom with a fresh budget rather than whatever was
+    left over from the ledge.
+
+    (An earlier version of this test exhausted all fifteen moves on the ledge
+    before sliding off. That was only reachable because of an infinite-stall
+    bug; in a correct engine a spent budget on a surface locks immediately.)
     """
     engine = Engine(EngineConfig(seed=1))
     engine.board = make_board(
@@ -244,18 +248,44 @@ def test_descending_to_a_new_row_refills_the_move_budget():
     engine.piece = Piece(PieceType.O, x=2, y=18)  # resting on the ledge
     engine._lowest_row = max(y for _, y in engine.piece.cells())
 
-    exhaust_resets(engine)
-    assert engine._lock_resets == MAX_LOCK_RESETS, "the budget should be spent"
+    # Adjust on the ledge, staying on it: x=2 and x=1 both sit over columns 0-4.
+    for index in range(6):
+        engine.step(Action.LEFT if index % 2 == 0 else Action.RIGHT, 0.001)
+    assert engine.piece is not None, "six moves must not lock the piece"
+    spent = engine._lock_resets
+    assert 0 < spent < MAX_LOCK_RESETS
 
-    # Slide off the end of the ledge and let it fall to the floor.
-    for _ in range(6):
-        engine.step(Action.RIGHT, 0.001)
+    # Slide off the end of the ledge and fall to the floor.
+    engine.step(Action.RIGHT, 0.001)
+    engine.step(Action.RIGHT, 0.001)
+    floor = TOTAL_HEIGHT - 1
     for _ in range(400):
         engine.step(Action.NOOP, 0.01)
-        if engine.piece is None:
+        if max(y for _, y in engine.piece.cells()) == floor:
             break
 
+    assert max(y for _, y in engine.piece.cells()) == floor, "should have landed"
     assert engine._lock_resets == 0, "landing lower must restore the budget"
+
+
+def test_a_spent_budget_locks_on_contact():
+    """The guideline rule the stall bug violated."""
+    engine = Engine(EngineConfig(seed=1))
+    engine.piece = Piece(PieceType.O, x=3, y=22)  # on the floor
+    engine._lowest_row = max(y for _, y in engine.piece.cells())
+    engine.step(Action.NOOP, 0.0)                 # register the touchdown
+
+    for index in range(MAX_LOCK_RESETS - 1):
+        engine.step(Action.LEFT if index % 2 else Action.RIGHT, 0.0)
+    assert engine.stats.pieces_placed == 0, "fourteen moves in, still in play"
+
+    # The fifteenth move is honoured — the piece really does move — and because
+    # it is then resting on a surface with the budget spent, it locks in the
+    # same tick. No time passes at all (dt=0), so this is not the lock timer.
+    before = engine.board.rows[:]
+    engine.step(Action.RIGHT, 0.0)
+    assert engine.stats.pieces_placed == 1, "a spent budget locks on contact"
+    assert engine.board.rows != before, "and it locked where the last move put it"
 
 
 def test_soft_drop_refills_the_move_budget():
@@ -274,6 +304,7 @@ def test_moving_sideways_does_not_refill_the_budget():
     engine.piece = Piece(PieceType.O, x=3, y=22)  # on the floor, cannot descend
     engine._lowest_row = max(y for _, y in engine.piece.cells())
     engine._lock_resets = 0
+    engine.step(Action.NOOP, 0.0)                 # let the engine see it land
 
     engine.step(Action.LEFT, 0.0)
     engine.step(Action.RIGHT, 0.0)

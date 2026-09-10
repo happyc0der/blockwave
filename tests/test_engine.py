@@ -395,3 +395,62 @@ def test_random_play_never_violates_an_invariant(seed):
             engine.reset(seed=rng.randrange(10_000))
 
     assert games > 0, "random play should have lost at least once in 10k steps"
+
+
+# -- fixed level ----------------------------------------------------------
+
+
+def test_fixed_level_never_advances():
+    engine = make_engine(start_level=3, fixed_level=True)
+    engine.stats.lines = 9
+    engine.board = make_board("####..####")
+    engine.piece = Piece(PieceType.O, x=3, y=2)
+
+    events = engine.step(Action.HARD_DROP, 0.0)
+    assert engine.stats.lines == 10, "lines still count"
+    assert engine.stats.level == 3, "but the level must not move"
+    assert EventType.LEVEL_UP not in event_types(events)
+
+
+def test_level_advances_by_default():
+    engine = make_engine(start_level=3)
+    engine.stats.lines = 9
+    engine.board = make_board("####..####")
+    engine.piece = Piece(PieceType.O, x=3, y=2)
+    engine.step(Action.HARD_DROP, 0.0)
+    assert engine.stats.level == 4
+
+
+# -- the infinite-rotation stall ------------------------------------------
+
+
+@pytest.mark.parametrize("piece_type", list(PieceType))
+def test_rotating_in_place_cannot_hold_a_piece_forever(piece_type):
+    """Holding rotate used to freeze the game.
+
+    A floor kick bumps a grounded piece into the air. Being airborne zeroed the
+    lock timer, and a move that ended airborne did not count against the
+    fifteen-move budget — so rotating in place reset the timer for free,
+    forever. Found by the RL reward-hacking suite, where a rotate-spamming
+    policy locked zero pieces in 8,000 ticks.
+    """
+    engine = make_engine(gravity_scale=4.0)
+    engine.piece = Piece(piece_type, x=3, y=20)
+    engine._lowest_row = max(y for _, y in engine.piece.cells())
+
+    for _ in range(200):
+        engine.step(Action.ROTATE_CW, 1 / 20)
+        if engine.stats.pieces_placed:
+            break
+    assert engine.stats.pieces_placed == 1, f"{piece_type.name} never locked"
+
+
+def test_alternating_rotation_directions_cannot_stall_either():
+    engine = make_engine(gravity_scale=4.0)
+    engine.piece = Piece(PieceType.T, x=3, y=21)
+    engine._lowest_row = max(y for _, y in engine.piece.cells())
+    for step in range(300):
+        engine.step(Action.ROTATE_CW if step % 2 else Action.ROTATE_CCW, 1 / 20)
+        if engine.stats.pieces_placed:
+            break
+    assert engine.stats.pieces_placed == 1

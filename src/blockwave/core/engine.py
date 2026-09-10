@@ -57,6 +57,11 @@ class EngineConfig:
     gravity_scale: float = 1.0
     #: Set false to make the engine a pure drop-only game (used by tests).
     allow_hold: bool = True
+    #: Hold the level at ``start_level`` regardless of lines cleared, so gravity
+    #: and delays never change. A practice mode for players, and stationary
+    #: dynamics for anything learning the game — otherwise an improving learner
+    #: makes its own environment harder until it is physically uncontrollable.
+    fixed_level: bool = False
 
 
 @dataclass(slots=True)
@@ -104,6 +109,7 @@ class Engine:
         self._gravity_accum = 0.0
         self._lock_timer = 0.0
         self._lock_resets = 0
+        self._touched_down = False
         self._lowest_row = -1
         self._last_move_was_rotation = False
         self._last_kick_index = -1
@@ -238,8 +244,14 @@ class Engine:
         # caused it.
         self._note_descent()
 
-        if is_grounded(piece, self.board) and self._lock_resets < MAX_LOCK_RESETS:
-            self._lock_timer = 0.0
+        # Once the piece has touched down, EVERY move counts against the
+        # budget — whether or not it is still resting on something afterwards.
+        # Counting only moves that end grounded let a floor kick bump the piece
+        # into the air for free: airborne zeroes the timer, the move costs
+        # nothing, and rotating in place held a piece aloft forever.
+        if self._touched_down:
+            if self._lock_resets < MAX_LOCK_RESETS:
+                self._lock_timer = 0.0
             self._lock_resets += 1
 
     def _do_hold(self, events: list[GameEvent]) -> None:
@@ -297,6 +309,15 @@ class Engine:
 
         if not is_grounded(piece, self.board):
             self._lock_timer = 0.0
+            return
+
+        self._touched_down = True
+
+        # Budget spent: guideline Extended Placement locks immediately on
+        # contact. Without this, re-landing restarted the full lock delay, so a
+        # piece bounced off the floor by kicks never finished locking.
+        if self._lock_resets >= MAX_LOCK_RESETS:
+            self._lock_piece(events)
             return
 
         self._lock_timer += dt * 1000.0
@@ -358,7 +379,7 @@ class Engine:
                 events.append(GameEvent(EventType.PERFECT_CLEAR))
 
             new_level = level_for_lines(stats.lines, self.config.start_level)
-            if new_level > stats.level:
+            if new_level > stats.level and not self.config.fixed_level:
                 stats.level = new_level
                 events.append(GameEvent(EventType.LEVEL_UP, new_level))
 
@@ -440,6 +461,7 @@ class Engine:
         self._gravity_accum = 0.0
         self._lock_timer = 0.0
         self._lock_resets = 0
+        self._touched_down = False
         self._last_move_was_rotation = False
         self._last_kick_index = -1
         # Where this piece started; descending past it refills the move budget.

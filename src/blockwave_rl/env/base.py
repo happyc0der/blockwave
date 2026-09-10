@@ -65,6 +65,12 @@ class EnvConfig:
     agent_hz: float = 20.0
     gravity_scale: float = 1.0
     start_level: int = 1
+    #: Stationary dynamics. With progression on, an improving agent levels up
+    #: until gravity outruns its decision rate — measured: at 20 Hz a scripted
+    #: player dies every time around level 11-13, where ~7 rows fall per
+    #: decision against the ~12 decisions positioning takes. That would make a
+    #: learning-curve plateau indistinguishable from the objective failing.
+    fixed_level: bool = True
     frame_stack: int = 4
     #: Rollout horizon. `truncated` fires here and nowhere else.
     max_steps: int | None = None
@@ -91,7 +97,12 @@ class BlockwaveEnv:
         c = self.config
         self.dt = 1.0 / c.agent_hz
         self.engine = Engine(
-            EngineConfig(seed=0, start_level=c.start_level, gravity_scale=c.gravity_scale)
+            EngineConfig(
+                seed=0,
+                start_level=c.start_level,
+                gravity_scale=c.gravity_scale,
+                fixed_level=c.fixed_level,
+            )
         )
         self.layout = Layout(c.cell_px)
         self.compositor = Compositor(self.layout, c.profile)
