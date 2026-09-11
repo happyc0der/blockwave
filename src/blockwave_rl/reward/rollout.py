@@ -129,3 +129,44 @@ EXPLOITS: dict[str, Policy] = {
     "rotate_spam": rotate_spam,
     "hold_spam": hold_spam,
 }
+
+
+def run_empowerment(
+    name: str,
+    policy: Policy,
+    *,
+    horizon: int = 2,
+    max_scored: int = 300,
+    max_steps: int = 200_000,
+    seed: int = 0,
+) -> RolloutResult:
+    """Score a policy by horizon empowerment of each locked board.
+
+    The queue is what the agent could see: the piece now in play plus the
+    preview. Empowerment is expensive, so only the first ``max_scored`` lock
+    events are scored — enough to estimate the mean.
+    """
+    from .empowerment import horizon_empowerment
+
+    env = BlockwaveEnv(EnvConfig(obs_mode=ObsMode.BOARD_STATE, agent_hz=20, gravity_scale=4.0))
+    env.reset(seed=seed)
+    rng = np.random.default_rng(seed)
+    values: list[float] = []
+    top_outs = 0
+    prev = env.engine.stats.pieces_placed
+    t = 0
+    while len(values) < max_scored and t < max_steps:
+        *_, info = env.step(policy(env.engine, rng, t))
+        t += 1
+        top_outs += int(info["top_out"])
+        placed = env.engine.stats.pieces_placed
+        if placed == prev and not info["top_out"]:
+            continue
+        prev = placed
+        engine = env.engine
+        queue = engine.preview(horizon) if engine.piece is None else (
+            [engine.piece.type] + engine.preview(horizon - 1)
+        )
+        values.append(horizon_empowerment(list(engine.board.rows), queue[:horizon]))
+    arr = np.array(values)
+    return RolloutResult(name, float(arr.mean()), float(arr.sum()), top_outs, t)
