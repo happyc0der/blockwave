@@ -307,3 +307,123 @@ game on the held-out seed, never the best one.
 
 What this does not answer is where it does saturate, or whether the seed spread
 (±10% at 50M) holds at this length: this is one seed.
+
+## 6. The pixel stage
+
+The board-state track reads true occupancy. The deliverable reads the screen,
+which changes one thing fundamentally: **empowerment needs a model of the game,
+and a pixel agent may not borrow the simulator's.** Counting reachable futures
+exactly, as sections 2-5 did, is knowledge of the rules. So the agent learns
+what its keys do, and counts futures through that.
+
+### The crop is forced
+
+BOARD_PLUS_PREVIEW, not BOARD_ONLY. One piece of lookahead is blind — on any
+board with headroom every placement is still reachable, which is finding 1 of
+section 2 — and seeing two pieces ahead means the next-piece panel has to be in
+frame. The strictest crop cannot carry this reward. Both variants were built in
+Stage 0 for exactly this choice.
+
+### Representation (plan Stage 2), thresholds set in advance
+
+A conv VAE over 88x88 grayscale frames, corpus mixed over random, drift,
+competent and near-empty play. Linear probes on the frozen 32-d latents,
+held out:
+
+| probe | R² | threshold |
+|---|---|---|
+| max height | 0.926 | 0.80 |
+| holes | 0.833 | 0.60 |
+| bumpiness | 0.703 | 0.50 |
+
+Reconstruction error is 0.8-1.7% per pixel and even across the four sources, so
+no policy's states are badly represented — the gap that made the SMiRL ranking
+arbitrary rather than merely wrong.
+
+### Two events, read off the screen
+
+The reward needs to know when a piece lands and when a game ends; the
+board-state track took both from `info`. Both are visible, and both detectors
+are validated against the engine over five policies. Four false starts, each a
+real property of the game rather than a tuning failure:
+
+* A line clear blanks its rows before collapsing them — a large *relative* drop
+  in filled area, which read as a game-over. Only a top-out empties the board
+  outright, so the test is absolute.
+* The playfield is never blank: it has a border, and a piece with its ghost is
+  on screen a frame after any reset. Hence a calibrated baseline.
+* Previews are miniatures, ~12 pixels a piece, and the hold preview dims to 45%
+  while spent. The brightness cut that works for the playfield is blind to a
+  held piece.
+* Only the *first* hold of a game draws from the queue; later holds swap with
+  the piece already held and shift nothing. Counting that first one as a
+  placement would pay a policy a reward tick for pressing one key.
+
+### Learning what the keys do
+
+The agent babbles: for each piece it runs one of 44 blind key-press programs
+(rotate r, step k, drop) and records the screen before and after. 60,000 tries,
+4.3% of them fatal. A small network predicts each program's effect in latent
+space and whether it ends the game:
+
+| held out | value | baseline |
+|---|---|---|
+| skill vs "nothing changes" | 0.546 | 0.0 |
+| identifies which program ran, top-1 | 0.192 | 0.023 (chance) |
+| mean rank of the true program | 4.6 of 44 | 21.5 (chance) |
+| fatal programs caught | 0.504 | — |
+
+That last pair matters more than the average error. A model whose error swamps
+the difference between programs cannot support a count of *distinct* futures
+however good its mean error looks, so "can it tell its own keys apart" is
+measured directly.
+
+### The reward
+
+Effective number of distinguishable futures under a Gaussian kernel, weighted
+by each future's chance of not ending the game, log-scaled, minus the same
+quantity on an empty board. The kernel width is the model's own held-out error:
+two futures are the same when the model cannot resolve them apart. That is not
+a free knob — it tightens as the model improves. The second piece is expanded
+over a fixed sample of programs, fixed rather than re-drawn per call, because a
+reward that scores one state differently twice is noise in the training signal.
+
+### Does it agree with the reward it replaces?
+
+The board-state track can compute this same quantity *exactly*, so the pixel
+estimate can be checked against ground truth before any RL is spent on it. Two
+comparisons, and they say different things.
+
+**Per state, weakly.** Over 400 states from mixed play: Spearman 0.31, Pearson
+0.44. Some of that is unavoidable — the exact reward saturates, scoring zero on
+every board with headroom, so a rank correlation across states is largely
+measuring ties.
+
+**Between policies, decisively.** The plan's Stage 3 gate, run with the reward
+computed exactly as it would be in training — from frames, through the agent's
+own model, no engine state in the path:
+
+| policy | reward per placement |
+|---|---|
+| competent | **−0.4367 ± 0.0032** |
+| all_noop | −0.6287 |
+| hard_drop_spam | −0.6286 |
+| drift | −0.6655 |
+| oscillate | −0.6708 |
+| hold_spam | −0.6673 |
+| rotate_spam | −0.6626 |
+| random | −0.6830 |
+
+Competent play beats every exploit at z 23-30. The exact reward separates the
+same policies by about 1% (z 12-15 after the queue correction), because it
+saturates where this one does not.
+
+**Caveat, stated rather than buried.** Part of that wider separation may be the
+model being less certain on cluttered boards rather than the agent genuinely
+having less control there. The two are hard to tell apart from the outside, and
+a reward that pays for legibility rather than for control is a different
+objective wearing the same name. What can be said is that it orders policies
+correctly and does so from pixels alone.
+
+Next: PPO on this reward, the same learner and the same protocol as the
+board-state track, with game score reported and never used.
