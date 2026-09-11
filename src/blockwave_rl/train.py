@@ -41,6 +41,7 @@ def train(args: argparse.Namespace) -> None:
 
     envs = ProcessVecEnv(
         args.envs, args.workers, horizon=args.horizon, seed=args.seed, death=args.death, gamma=args.gamma,
+        agent_hz=args.agent_hz, gravity_scale=args.gravity,
     )
     grid, queue = envs.reset()
     policy = BoardPolicy(grid.shape[1:], queue.shape[1], 8).to(args.device)
@@ -146,6 +147,11 @@ def main() -> None:
     p.add_argument("--lam", type=float, default=0.95)
     p.add_argument("--lam-step", type=float, default=1.0)
     p.add_argument("--death", choices=("absorbing", "one_step"), default="absorbing")
+    # Decisions per second and fall speed. Neither gives the agent information;
+    # together they set how many decisions a piece lives, i.e. the length of the
+    # credit-assignment chain.
+    p.add_argument("--agent-hz", type=float, default=20.0)
+    p.add_argument("--gravity", type=float, default=4.0)
     p.add_argument("--lr", type=float, default=2.5e-4)
     p.add_argument("--entropy", type=float, default=0.01)
     p.add_argument("--seed", type=int, default=0)

@@ -66,13 +66,15 @@ class EmpowermentEnv:
         config: EnvConfig | None = None,
         death: str = "absorbing",
         gamma: float = 0.99,
+        agent_hz: float = 20.0,
+        gravity_scale: float = 4.0,
     ) -> None:
         if death not in DEATH_ACCOUNTING:
             raise ValueError(f"death must be one of {DEATH_ACCOUNTING}")
         self.horizon = horizon
         self.death = death
         self.gamma = gamma
-        base = config or EnvConfig(obs_mode=ObsMode.BOARD_STATE, agent_hz=20, gravity_scale=4.0)
+        base = config or EnvConfig(obs_mode=ObsMode.BOARD_STATE, agent_hz=agent_hz, gravity_scale=gravity_scale)
         base.obs_mode = ObsMode.BOARD_STATE
         self.env = BlockwaveEnv(base)
         self.reward_fn = HorizonEmpowermentReward(horizon)

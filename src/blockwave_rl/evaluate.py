@@ -183,6 +183,8 @@ def play(
     seed: int = EVAL_SEED,
     death: str = "absorbing",
     gamma: float = 0.99,
+    agent_hz: float = 20.0,
+    gravity_scale: float = 4.0,
 ) -> dict[str, float]:
     """Play ``act`` and measure it over complete games (see `complete_games`).
 
@@ -194,7 +196,10 @@ def play(
     """
     from .env.vector import ProcessVecEnv
 
-    vec = ProcessVecEnv(envs, workers, horizon=horizon, seed=seed, death=death, gamma=gamma)
+    vec = ProcessVecEnv(
+        envs, workers, horizon=horizon, seed=seed, death=death, gamma=gamma,
+        agent_hz=agent_hz, gravity_scale=gravity_scale,
+    )
     try:
         grid, queue = vec.reset()
         tracker = GameTracker(envs)
@@ -266,6 +271,8 @@ def main() -> None:
     p.add_argument("--death", choices=("absorbing", "one_step"), default="absorbing",
                    help="death accounting for the reported intrinsic reward; the same for every row")
     p.add_argument("--gamma", type=float, default=0.99)
+    p.add_argument("--agent-hz", type=float, default=20.0, help="baselines only; runs use their own config")
+    p.add_argument("--gravity", type=float, default=4.0, help="baselines only; runs use their own config")
     p.add_argument("--every", type=int, default=1, help="evaluate every n-th checkpoint (schedule order)")
     args = p.parse_args()
 
@@ -282,21 +289,26 @@ def main() -> None:
 
     for target in args.targets:
         if target in BASELINES:
-            result = play(baseline_actor(target, args.seed), **common)
-            print(_row(target, result), flush=True)
+            dynamics = dict(agent_hz=args.agent_hz, gravity_scale=args.gravity)
+            result = play(baseline_actor(target, args.seed), **common, **dynamics)
+            print(_row(f"{target} @{args.agent_hz:g}Hz", result), flush=True)
             out = Path("runs") / "baselines"
             out.mkdir(parents=True, exist_ok=True)
-            (out / f"{target}.json").write_text(json.dumps({**result, **common}, indent=2))
+            suffix = "" if (args.agent_hz, args.gravity) == (20.0, 4.0) else f"_{args.agent_hz:g}hz_g{args.gravity:g}"
+            (out / f"{target}{suffix}.json").write_text(json.dumps({**result, **common, **dynamics}, indent=2))
             continue
         run = Path(target)
-        horizon = json.loads((run / "config.json").read_text())["horizon"]
+        config = json.loads((run / "config.json").read_text())
+        horizon = config["horizon"]
+        # The policy is evaluated in the dynamics it was trained in.
+        dynamics = dict(agent_hz=config.get("agent_hz", 20.0), gravity_scale=config.get("gravity", 4.0))
         ckpts = sorted(run.glob("ckpt_*.pt"))
         ckpts = ckpts[args.every - 1 :: args.every] if args.every > 1 else ckpts
         with (run / "eval.jsonl").open("w") as log:
             for ckpt in ckpts:
-                result = play(checkpoint_actor(ckpt, device, horizon), horizon=horizon, **common)
+                result = play(checkpoint_actor(ckpt, device, horizon), horizon=horizon, **common, **dynamics)
                 result["checkpoint"] = ckpt.name
-                log.write(json.dumps({**result, **common}) + "\n")
+                log.write(json.dumps({**result, **common, **dynamics}) + "\n")
                 log.flush()
                 print(_row(f"{run.name}/{ckpt.stem}", result), flush=True)
 

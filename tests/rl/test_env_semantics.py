@@ -161,3 +161,28 @@ def test_frame_stack_carries_motion():
     for _ in range(4):
         obs, *_ = env.step(int(Action.NOOP))
     assert not np.array_equal(obs[0], obs[-1])
+
+
+def test_empowerment_env_defaults_match_the_recorded_runs():
+    """Every run logged before --agent-hz existed used 20 Hz and gravity x4."""
+    from blockwave_rl.reward.empowerment_env import EmpowermentEnv
+
+    env = EmpowermentEnv()
+    assert env.env.config.agent_hz == 20.0
+    assert env.env.config.gravity_scale == 4.0
+
+
+def test_a_slower_agent_gets_fewer_decisions_per_piece():
+    """Same fall speed, fewer decisions: the credit chain shortens, nothing is revealed."""
+    from blockwave_rl.reward.empowerment_env import EmpowermentEnv
+
+    def steps_to_first_lock(hz: float) -> int:
+        env = EmpowermentEnv(agent_hz=hz)
+        env.reset(seed=1)
+        for t in range(1, 2_000):
+            if env.step(0).locked:
+                return t
+        raise AssertionError("no piece locked")
+
+    fast, slow = steps_to_first_lock(20.0), steps_to_first_lock(5.0)
+    assert slow * 3 < fast < slow * 5
