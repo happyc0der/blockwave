@@ -233,4 +233,11 @@ That's 4.5× the 10M runs' line rate (0.0206) and about 23% of the heuristic's
 high and flattened only as it approached zero, as the 10M runs did. The
 ceiling at 10M was mostly the schedule, not the objective.
 
+To watch it: `python -m blockwave_rl.watch runs/abs5hz_long_seed0/ckpt_04000.pt`
+renders the first complete game on the held-out seed through the game's own
+compositor. The game is chosen by that rule, never by how well it went. That
+game cleared 2 lines against an average of ~4.7. The agent spreads pieces
+across the full width and sometimes finishes a line, but it leaves holes and
+builds an uneven stack, which fits 23% of the heuristic.
+
 Seeds 1 and 2: in progress.
