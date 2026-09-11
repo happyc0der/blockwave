@@ -94,13 +94,28 @@ def test_the_model_learns_to_tell_its_own_keys_apart():
     assert quality["macro_rank"] < 1.0
 
 
-def test_a_state_where_everything_is_fatal_has_no_futures():
+def test_a_state_where_everything_is_fatal_has_no_choice_left():
+    """One outcome, its own: log(1) = 0, matching the exact reward's dead board."""
     model = MacroModel(latent_dim=4)
     with torch.no_grad():
         model.death.bias.fill_(20.0)  # everything kills
     reward = PixelEmpowerment(model, horizon=1, width=1.0)
     reward.calibrate(np.zeros((1, 4), dtype=np.float32), width=1.0)
-    assert reward.raw(np.zeros((1, 4), dtype=np.float32))[0] == pytest.approx(np.log(1e-3))
+    assert reward.raw(np.zeros((1, 4), dtype=np.float32))[0] == pytest.approx(0.0)
+
+
+def test_the_death_charge_makes_one_more_placement_never_worse():
+    """Section 3's finding, carried over: charged once, dying fast pays."""
+    model = MacroModel(latent_dim=4)
+    reward = PixelEmpowerment(model, horizon=1, width=1.0)
+    reward.calibrate(np.zeros((1, 4), dtype=np.float32), width=1.0)
+    reward._baseline = 1.25
+    gamma = 0.99
+    absorbing = reward.death_charge(gamma)
+    once = -reward.baseline
+    # The worst a live placement can score is minus the baseline.
+    assert once + gamma * absorbing >= absorbing - 1e-9, "absorbing: lingering is never worse"
+    assert once + gamma * once < once, "charged once: dying now beats one more placement"
 
 
 def test_the_reward_is_zero_on_the_board_it_was_calibrated_against():

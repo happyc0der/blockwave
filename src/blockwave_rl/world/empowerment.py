@@ -31,8 +31,11 @@ import torch
 
 from .model import MacroModel
 
-#: Guards log(0) when every future is predicted to end the game.
-FLOOR = 1e-3
+#: A board with no future worth reaching still has one outcome: itself. The
+#: exact reward says the same — game over is log(1 + 0) = 0 raw, so the reward
+#: there is minus the empty-board baseline, and this floor keeps the two
+#: definitions in step.
+FLOOR = 1.0
 
 
 def effective_count(points: torch.Tensor, weights: torch.Tensor, width: float) -> torch.Tensor:
@@ -119,3 +122,14 @@ class PixelEmpowerment:
     def __call__(self, latents: np.ndarray) -> np.ndarray:
         """The reward: zero with a board's worth of headroom, negative as it shrinks."""
         return self.raw(latents) - self.baseline
+
+    def death_charge(self, gamma: float) -> float:
+        """What a top-out costs: zero control now, and for the dead game's rest.
+
+        The board-state track's finding, carried over unchanged (section 3): a
+        top-out charged for one placement only makes hurrying a doomed game to
+        its end the reward-optimal move, because the soft reset hands back full
+        control. Charged for every placement the dead game would have had, one
+        more placement alive is never worse than dying now.
+        """
+        return -self.baseline - gamma * self.baseline / (1.0 - gamma)

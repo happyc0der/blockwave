@@ -87,7 +87,11 @@ class RunningStd:
         return float(np.sqrt(self.var) + 1e-8)
 
 
-def update(policy: nn.Module, optimizer, batch: dict, config: PPOConfig) -> dict:
+def update(
+    policy: nn.Module, optimizer, batch: dict, config: PPOConfig, inputs: tuple[str, ...] = ("grid", "queue"),
+) -> dict:
+    """``inputs`` names the observation tensors the policy takes, in order: the
+    board-state policy reads a grid and a queue, the pixel policy reads frames."""
     n = batch["actions"].shape[0]
     idx = np.arange(n)
     size = n // config.minibatches
@@ -97,7 +101,7 @@ def update(policy: nn.Module, optimizer, batch: dict, config: PPOConfig) -> dict
         np.random.shuffle(idx)
         for start in range(0, n, size):
             mb = idx[start : start + size]
-            logp, entropy, value = policy.evaluate(batch["grid"][mb], batch["queue"][mb], batch["actions"][mb])
+            logp, entropy, value = policy.evaluate(*(batch[k][mb] for k in inputs), batch["actions"][mb])
             ratio = torch.exp(logp - batch["logp"][mb])
             adv = batch["adv"][mb]
             adv = (adv - adv.mean()) / (adv.std() + 1e-8)
