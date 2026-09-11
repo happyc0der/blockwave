@@ -240,4 +240,32 @@ game cleared 2 lines against an average of ~4.7. The agent spreads pieces
 across the full width and sometimes finishes a line, but it leaves holes and
 builds an uneven stack, which fits 23% of the heuristic.
 
+### What it learned, and why that is slow
+
+A behaviour profile over 1,500 placements per policy. It is evaluator-side:
+it reads the engine's hole count, which the agent never sees.
+
+| policy (5 Hz) | decisions/piece | locked by hard drop | holes per placement |
+|---|---|---|---|
+| drift | 23.7 | 0% | +2.70 |
+| 10M run, final | 27.1 | 0% | +1.57 |
+| 50M run, ckpt 1000 | 24.8 | 0% | +1.17 |
+| 50M run, ckpt 2000 | 24.0 | 0% | +0.86 |
+| 50M run, ckpt 4000 | 24.6 | 0% | +0.74 |
+| scripted heuristic | 5.1 | 99% | +0.03 |
+
+- **It never hard-drops, at any checkpoint.** Every piece falls the whole way
+  while the agent steers it. Under per-placement discounting, time is free, so
+  hard drop has no reward value. Using the whole fall to adjust is rational.
+- **What improved is placement quality.** Holes per placement fell steadily,
+  from drift's 2.70 to 0.74. That is the whole of the gain, and still ~20× the
+  heuristic.
+- **Why that is slow.** Empowerment is blind to holes on a low board: a hole
+  removes none of the next pieces' reachable placements, so it costs nothing
+  when it is made. Its price arrives many placements later, when the covered
+  rows keep the stack high near the top. It reaches the placement that caused
+  it only through the value function's long chain back from danger and death.
+  A longer empowerment horizon would not help: holes do not reduce short-term
+  options anywhere except near the top.
+
 Seeds 1 and 2: in progress.
