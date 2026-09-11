@@ -213,3 +213,24 @@ And the paired 20 Hz run, against the 20 Hz baselines in the earlier table:
 The reward learns something real, repeatably, without ever seeing the score.
 Whether it can learn *Tetris* is still open. That needs either a much longer run
 or a diagnostic that separates the learner from the objective.
+
+## 4. Longer training: a slow learner, not a ceiling
+
+Same declared configuration, 50M steps instead of 10M. The only change is run
+length: the same linear learning-rate decay, stretched, so it decays 5× more
+slowly. Held-out, complete games, checkpoints on the fixed schedule
+(`runs/abs5hz_long_seed*`):
+
+| seed 0 | lines/piece | deaths/piece | pieces/game | games |
+|---|---|---|---|---|
+| ckpt 1000 (12.3M steps) | 0.0360 ± 0.0007 | 0.0251 | 39.9 | 1736 |
+| ckpt 2000 (24.6M) | 0.0621 ± 0.0007 | 0.0221 | 45.3 | 1581 |
+| ckpt 3000 (36.9M) | 0.0844 ± 0.0010 | 0.0199 | 50.2 | 1347 |
+| ckpt 4000 (49.2M) | **0.0923 ± 0.0012** | **0.0194** | **51.7** | 1352 |
+
+That's 4.5× the 10M runs' line rate (0.0206) and about 23% of the heuristic's
+0.393. The training curve rose almost linearly while the learning rate was
+high and flattened only as it approached zero, as the 10M runs did. The
+ceiling at 10M was mostly the schedule, not the objective.
+
+Seeds 1 and 2: in progress.
