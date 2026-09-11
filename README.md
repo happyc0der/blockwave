@@ -21,6 +21,7 @@ uv run blockwave play        # play
 - [The ruleset](#the-ruleset) · [Difficulty](#difficulty)
 - [Architecture](#architecture) · [Rendering](#rendering) · [Audio](#audio)
 - [Replays](#replays) · [Driving the engine](#driving-the-engine-directly)
+- [The learning agent](#the-learning-agent)
 - [Tests](#tests) · [Requirements](#requirements) · [License](#license)
 
 ---
@@ -290,10 +291,37 @@ print(engine.to_ascii())    # the board as text
 `telemetry()` returns score, lines, level, combo, back-to-back, pieces placed,
 T-spins, quads, perfect clears, holes, bumpiness, aggregate and max height.
 
+## The learning agent
+
+`src/blockwave_rl/` is a research package: an agent that learns to play from a
+reward it computes for itself, and **never sees the score**. Score, lines and
+level never reach its observations, its reward, its gradients or the choice of
+which checkpoint to report. Only the evaluator reads them, and a static test
+fails if any other module does. The package depends on the game, never the
+reverse, and `torch` is an optional extra, so installing the game does not pull
+it in.
+
+```bash
+uv sync --extra dev --extra rl
+uv run python -m blockwave_rl.train --out runs/demo --agent-hz 5 --steps 10000000   # ~15-20 min on an M4 Pro
+uv run python -m blockwave_rl.evaluate runs/demo drift random --agent-hz 5 --every 8
+uv run python -m blockwave_rl.watch runs/demo/ckpt_00813.pt   # one game as video; needs ffmpeg
+```
+
+The reward is **empowerment**: how many distinct futures the agent's key
+presses can still reach, computed with the real simulator as a perfect model of
+the game. The agent presses real keys, one per decision. It currently reads the
+true board rather than pixels, as a feasibility check; learning from pixels is
+the next stage. After 50M steps it clears 0.09 lines per piece. A scripted
+heuristic clears 0.39, and the strongest trivial baseline 0.002.
+
+[RESEARCH.md](RESEARCH.md) records every approach tried, including the ones
+that failed and why.
+
 ## Tests
 
 ```bash
-uv run pytest       # 177 test functions, 292 cases after parametrisation
+uv run pytest       # 254 test functions, 432 cases after parametrisation (129 for the agent)
 uv run blockwave bench
 ```
 
@@ -309,6 +337,9 @@ The interesting ones are not the happy paths:
 | `test_overlay.py` | Overlapping panel text, across cell sizes and nine-digit scores. |
 | `test_replay.py` | A replay must reproduce its session byte for byte. |
 | `test_perf.py` | Throughput floors, so performance cannot rot silently. |
+| `rl/test_firewall.py` | Score leaking to the agent. Boards that differ only in score must give byte-identical observations and rewards, and no agent module may read score, lines or level. |
+| `rl/test_adversarial.py` | Reward hacking, checked before any training. Exploit policies that beat a reward are recorded as strict xfails rather than hidden. |
+| `rl/test_empowerment.py` | The reward's properties, including a flaw a learner found (dying fast paid) and the fix: one more placement alive is never worth less than dying now. |
 
 `bench` measures engine steps/sec and per-profile frame rates against those
 floors.
@@ -316,7 +347,8 @@ floors.
 ## Requirements
 
 Python 3.12+, `numpy`, `pygame-ce`. Managed with [uv](https://docs.astral.sh/uv/);
-`requirements.txt` and `requirements-dev.txt` are provided for plain pip.
+`requirements.txt` and `requirements-dev.txt` are provided for plain pip. The
+agent additionally needs `torch` (the `rl` extra), and `ffmpeg` to write videos.
 
 ```bash
 pip install -r requirements-dev.txt && pip install -e .
