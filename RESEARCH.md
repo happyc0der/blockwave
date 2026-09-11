@@ -221,17 +221,22 @@ length: the same linear learning-rate decay, stretched, so it decays 5× more
 slowly. Held-out, complete games, checkpoints on the fixed schedule
 (`runs/abs5hz_long_seed*`):
 
-| seed 0 | lines/piece | deaths/piece | pieces/game | games |
-|---|---|---|---|---|
-| ckpt 1000 (12.3M steps) | 0.0360 ± 0.0007 | 0.0251 | 39.9 | 1736 |
-| ckpt 2000 (24.6M) | 0.0621 ± 0.0007 | 0.0221 | 45.3 | 1581 |
-| ckpt 3000 (36.9M) | 0.0844 ± 0.0010 | 0.0199 | 50.2 | 1347 |
-| ckpt 4000 (49.2M) | **0.0923 ± 0.0012** | **0.0194** | **51.7** | 1352 |
+| checkpoint | env steps | lines/piece, seeds 0 / 1 / 2 | mean | pieces/game, seeds 0 / 1 / 2 | mean |
+|---|---|---|---|---|---|
+| 1000 | 12.3M | 0.0360 / 0.0306 / 0.0322 | 0.0329 | 39.9 / 38.3 / 39.1 | 39.1 |
+| 2000 | 24.6M | 0.0621 / 0.0529 / 0.0516 | 0.0555 | 45.3 / 43.6 / 42.9 | 43.9 |
+| 3000 | 36.9M | 0.0844 / 0.0707 / 0.0654 | 0.0735 | 50.2 / 47.2 / 46.0 | 47.8 |
+| 4000 | 49.2M | 0.0923 / 0.0812 / 0.0769 | **0.0834** | 51.7 / 49.5 / 48.5 | **49.9** |
 
-That's 4.5× the 10M runs' line rate (0.0206) and about 23% of the heuristic's
-0.393. The training curve rose almost linearly while the learning rate was
-high and flattened only as it approached zero, as the 10M runs did. The
-ceiling at 10M was mostly the schedule, not the objective.
+Standard errors within each row are ≤ 0.0012 lines per piece over 1,350–2,000
+games; the spread between seeds (sd 0.008 at checkpoint 4000) is the larger
+uncertainty. Deaths per piece at checkpoint 4000: 0.0194 / 0.0202 / 0.0206.
+
+Every seed improves at every scheduled checkpoint. At 50M the mean is 4.0× the
+10M runs' line rate (0.0206) and 21% of the heuristic's 0.393. The curves rose
+almost linearly while the learning rate was high and flattened only as it
+approached zero, as the 10M runs did. The ceiling at 10M was mostly the
+schedule, not the objective. Where it does saturate is still unmeasured.
 
 To watch it: `python -m blockwave_rl.watch runs/abs5hz_long_seed0/ckpt_04000.pt`
 renders the first complete game on the held-out seed through the game's own
@@ -270,4 +275,3 @@ it reads the engine's hole count, which the agent never sees.
   low board that means tens of pieces ahead, far beyond what exact counting can
   afford.
 
-Seeds 1 and 2: in progress.
