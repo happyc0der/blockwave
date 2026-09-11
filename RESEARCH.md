@@ -265,7 +265,9 @@ it reads the engine's hole count, which the agent never sees.
   when it is made. Its price arrives many placements later, when the covered
   rows keep the stack high near the top. It reaches the placement that caused
   it only through the value function's long chain back from danger and death.
-  A longer empowerment horizon would not help: holes do not reduce short-term
-  options anywhere except near the top.
+  A practical horizon (2–3 pieces) does not change this. A hole makes the stack
+  taller, so a long enough lookahead would see it reach the top sooner, but on a
+  low board that means tens of pieces ahead, far beyond what exact counting can
+  afford.
 
 Seeds 1 and 2: in progress.
