@@ -100,8 +100,26 @@ class EmpowermentReward:
 from blockwave.core.constants import FULL_ROW  # noqa: E402
 
 
-def _placements(rows: tuple[int, ...], piece: PieceType):
-    """Resulting boards (line clears applied), excluding top-outs. Deduped."""
+def _first_filled(rows: tuple[int, ...] | list[int]) -> list[list[int]]:
+    """``table[c][r]``: the first filled row at or below ``r`` in column ``c``.
+
+    Built once per board, it turns a straight drop into an O(4) lookup instead
+    of stepping the piece down a row at a time. Exact including overhangs: a
+    falling cell stops at the first obstruction *below its own starting row*,
+    which is what the table indexes, not the column's topmost filled cell.
+    """
+    table = []
+    for col in range(BOARD_WIDTH):
+        bit = 1 << col
+        column = [TOTAL_HEIGHT] * (TOTAL_HEIGHT + 1)
+        for row in range(TOTAL_HEIGHT - 1, -1, -1):
+            column[row] = row if rows[row] & bit else column[row + 1]
+        table.append(column)
+    return table
+
+
+def _placements_reference(rows: tuple[int, ...], piece: PieceType):
+    """The straightforward version. Kept so the fast one can be checked against it."""
     base = list(rows)
     seen: set[tuple[int, ...]] = set()
     for rotation in _SHAPES[piece]:
@@ -112,6 +130,30 @@ def _placements(rows: tuple[int, ...], piece: PieceType):
             drop = 0
             while not _collides(base, [(cx, cy + drop + 1) for cx, cy in cells]):
                 drop += 1
+            final = [(cx, cy + drop) for cx, cy in cells]
+            if all(cy < VISIBLE_TOP for _, cy in final):
+                continue
+            after = base[:]
+            for cx, cy in final:
+                after[cy] |= 1 << cx
+            kept = [r for r in after if r != FULL_ROW]
+            board = tuple([0] * (TOTAL_HEIGHT - len(kept)) + kept)
+            if board not in seen:
+                seen.add(board)
+                yield board
+
+
+def _placements(rows: tuple[int, ...], piece: PieceType):
+    """Resulting boards (line clears applied), excluding top-outs. Deduped."""
+    base = list(rows)
+    below = _first_filled(rows)
+    seen: set[tuple[int, ...]] = set()
+    for rotation in _SHAPES[piece]:
+        for x in range(-3, BOARD_WIDTH):
+            cells = [(x + bx, SPAWN_Y + by) for bx, by in rotation]
+            if _collides(base, cells):
+                continue
+            drop = min(below[cx][cy + 1] - 1 - cy for cx, cy in cells)
             final = [(cx, cy + drop) for cx, cy in cells]
             if all(cy < VISIBLE_TOP for _, cy in final):
                 continue
