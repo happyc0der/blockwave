@@ -28,6 +28,21 @@ def _device(requested: str) -> str:
     return requested
 
 
+def lr_scale(step: int, total: int, decay_start: float = 0.0) -> float:
+    """Learning-rate multiplier for update ``step`` (1-based) of ``total``.
+
+    Held at 1 until ``decay_start`` of the run has passed, then linear to zero.
+    ``decay_start=0`` is plain linear decay from the first update, which is what
+    every run before this option used. The 10M and 50M runs both flattened
+    exactly as their rate approached zero, so a run that asks where learning
+    saturates has to hold the rate up first.
+    """
+    frac = (step - 1) / total
+    if frac < decay_start:
+        return 1.0
+    return 1.0 - (frac - decay_start) / (1.0 - decay_start)
+
+
 def train(args: argparse.Namespace) -> None:
     # One thread here: the workers already occupy the cores during collection,
     # and on MPS the update does not need CPU threads anyway.
@@ -56,9 +71,8 @@ def train(args: argparse.Namespace) -> None:
     started = time.perf_counter()
 
     for step in range(1, total_updates + 1):
-        # Linear learning-rate decay to zero.
         for group in optimizer.param_groups:
-            group["lr"] = args.lr * (1.0 - (step - 1) / total_updates)
+            group["lr"] = args.lr * lr_scale(step, total_updates, args.lr_decay_start)
 
         buf = {k: [] for k in ("grid", "queue", "actions", "logp", "values", "rewards", "locked")}
         intrinsic, placements, deaths, alive = 0.0, 0, 0, 0.0
@@ -153,6 +167,8 @@ def main() -> None:
     p.add_argument("--agent-hz", type=float, default=20.0)
     p.add_argument("--gravity", type=float, default=4.0)
     p.add_argument("--lr", type=float, default=2.5e-4)
+    p.add_argument("--lr-decay-start", type=float, default=0.0,
+                   help="fraction of the run to hold the learning rate before decaying linearly to zero")
     p.add_argument("--entropy", type=float, default=0.01)
     p.add_argument("--seed", type=int, default=0)
     # MPS: the PPO update is ~26x faster than on CPU (0.48s vs 12.9s). Not

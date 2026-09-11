@@ -103,3 +103,21 @@ def test_lam_step_never_touches_the_discount():
     for lam_step in (1.0, 0.9, 0.5):
         adv, _ = gae(rewards, values, np.zeros(1), locked, 0.5, 0.95, lam_step=lam_step)
         np.testing.assert_allclose(adv[:, 0], 0.0, atol=1e-6)
+
+
+def test_lr_schedule_default_is_the_linear_decay_every_recorded_run_used():
+    from blockwave_rl.train import lr_scale
+
+    total = 813
+    for step in (1, 2, 400, 813):
+        assert lr_scale(step, total) == pytest.approx(1.0 - (step - 1) / total)
+
+
+def test_lr_schedule_holds_then_decays_to_zero():
+    from blockwave_rl.train import lr_scale
+
+    total = 1000
+    assert lr_scale(1, total, 0.8) == 1.0
+    assert lr_scale(800, total, 0.8) == 1.0
+    assert lr_scale(901, total, 0.8) == pytest.approx(0.5)
+    assert 0.0 < lr_scale(1000, total, 0.8) < 0.01
