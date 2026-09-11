@@ -140,3 +140,86 @@ def test_correction_removes_queue_noise_without_reordering():
     raw_empty = [horizon_empowerment(EMPTY, q) for q in queues]
     assert max(raw_empty) - min(raw_empty) > 1.0, "raw empowerment swings with the queue"
     assert all(reward(EMPTY, q) == 0.0 for q in queues), "corrected does not"
+
+
+# -- death accounting ------------------------------------------------------
+#
+# A better learner (per-tick credit, `lam_step`) found that the first
+# accounting made dying fast the best use of a doomed board: it spent 1.8
+# placements in danger before each death, against drift's 5.9. These tests pin
+# the flaw and the fix as properties of the reward, independent of any learner.
+
+GAMMA = 0.99
+BOARDS = {"empty": EMPTY, "flat": FLAT, "tower_16": TOWER_16, "tower_18": TOWER_18, "at_spawn": AT_SPAWN}
+
+
+def _one_more_then_die_minus_die_now(reward, rows, gamma_for_death, worst: bool = True):
+    """(place, then die next) - (die now), worst case or mean over current queues."""
+    from blockwave_rl.reward.empowerment import bag_windows
+
+    windows = bag_windows(2)
+    next_death = sum(p * reward.death(list(w), gamma_for_death) for w, p in windows.items())
+    gaps = {q: reward(rows, list(q)) + GAMMA * next_death - reward.death(list(q), gamma_for_death) for q in windows}
+    if worst:
+        return min(gaps.values())
+    return sum(p * gaps[q] for q, p in windows.items())
+
+
+@pytest.mark.parametrize("name", sorted(BOARDS))
+def test_absorbing_death_never_rewards_dying_sooner(name):
+    """On every board and every queue, one more placement alive is worth at least dying now."""
+    from blockwave_rl.reward.empowerment import HorizonEmpowermentReward
+
+    reward = HorizonEmpowermentReward(horizon=2)
+    assert _one_more_then_die_minus_die_now(reward, BOARDS[name], GAMMA) >= -1e-9
+
+
+def test_one_step_death_rewards_dying_sooner_on_a_dangerous_board():
+    """The flaw, recorded: charged once, death is cheaper than lingering in danger.
+
+    In expectation over the queue, so this is the board speaking, not the queue.
+    (Worst case over the current queue it fails even on an empty board: dying
+    while holding a cheap queue like O-O costs less than an average later death.)
+    """
+    from blockwave_rl.reward.empowerment import HorizonEmpowermentReward
+
+    reward = HorizonEmpowermentReward(horizon=2)
+    assert _one_more_then_die_minus_die_now(reward, AT_SPAWN, None, worst=False) < 0
+    assert _one_more_then_die_minus_die_now(reward, EMPTY, None, worst=False) > 0, "headroom: no incentive"
+
+
+def test_absorbing_death_is_the_dead_games_discounted_stream():
+    from blockwave_rl.reward.empowerment import HorizonEmpowermentReward
+
+    reward = HorizonEmpowermentReward(horizon=2)
+    q = [PieceType.T, PieceType.S]
+    once = reward.death(q)
+    assert once == -reward._baseline(tuple(q))
+    stream = once - GAMMA * reward.mean_baseline() / (1 - GAMMA)
+    assert reward.death(q, GAMMA) == pytest.approx(stream)
+    assert reward.death(q, GAMMA) < 50 * once, "about 100 placements of zero control"
+
+
+def test_bag_windows_are_exact():
+    from blockwave_rl.reward.empowerment import bag_windows
+
+    for horizon in (1, 2, 3):
+        assert sum(bag_windows(horizon).values()) == pytest.approx(1.0)
+    pairs = bag_windows(2)
+    # Within a bag consecutive pieces differ; only a bag boundary (1 in 7) repeats.
+    assert pairs[(PieceType.T, PieceType.T)] == pytest.approx(1 / 343)
+    assert pairs[(PieceType.T, PieceType.S)] == pytest.approx(1 / 49 + 1 / 343)
+
+
+def test_bag_windows_match_the_real_randomizer():
+    from collections import Counter
+
+    from blockwave.core.randomizer import SevenBag
+    from blockwave_rl.reward.empowerment import bag_windows
+
+    bag = SevenBag(seed=3)
+    seq = [bag.next() for _ in range(70_001)]
+    counts = Counter(zip(seq, seq[1:]))
+    same = sum(v for (a, b), v in counts.items() if a == b) / (len(seq) - 1)
+    assert same == pytest.approx(7 / 343, abs=0.003)
+    assert set(counts) == set(bag_windows(2))

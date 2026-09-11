@@ -39,11 +39,13 @@ def train(args: argparse.Namespace) -> None:
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
 
-    envs = ProcessVecEnv(args.envs, args.workers, horizon=args.horizon, seed=args.seed)
+    envs = ProcessVecEnv(
+        args.envs, args.workers, horizon=args.horizon, seed=args.seed, death=args.death, gamma=args.gamma,
+    )
     grid, queue = envs.reset()
     policy = BoardPolicy(grid.shape[1:], queue.shape[1], 8).to(args.device)
     optimizer = torch.optim.Adam(policy.parameters(), lr=args.lr, eps=1e-5)
-    config = PPOConfig(gamma=args.gamma, lam=args.lam, entropy=args.entropy, lr=args.lr)
+    config = PPOConfig(gamma=args.gamma, lam=args.lam, lam_step=args.lam_step, entropy=args.entropy, lr=args.lr)
     scale = RunningStd(args.envs, args.gamma)
     tracker = GameTracker(args.envs)
     log = (out / "log.jsonl").open("w")
@@ -58,7 +60,7 @@ def train(args: argparse.Namespace) -> None:
             group["lr"] = args.lr * (1.0 - (step - 1) / total_updates)
 
         buf = {k: [] for k in ("grid", "queue", "actions", "logp", "values", "rewards", "locked")}
-        intrinsic, placements, deaths = 0.0, 0, 0
+        intrinsic, placements, deaths, alive = 0.0, 0, 0, 0.0
         for _ in range(T):
             g = torch.as_tensor(grid, device=args.device)
             q = torch.as_tensor(queue, device=args.device)
@@ -78,12 +80,16 @@ def train(args: argparse.Namespace) -> None:
             intrinsic += float(batch.reward[batch.locked].sum())
             placements += int(batch.locked.sum())
             deaths += int(batch.top_out.sum())
+            alive += float(batch.reward[batch.locked & ~batch.top_out].sum())
             grid, queue = batch.grid, batch.queue
 
         with torch.no_grad():
             _, next_value = policy(torch.as_tensor(grid, device=args.device), torch.as_tensor(queue, device=args.device))
         arr = {k: np.asarray(v) for k, v in buf.items()}
-        adv, ret = gae(arr["rewards"], arr["values"], next_value.cpu().numpy(), arr["locked"], args.gamma, args.lam)
+        adv, ret = gae(
+            arr["rewards"], arr["values"], next_value.cpu().numpy(), arr["locked"],
+            args.gamma, args.lam, args.lam_step,
+        )
 
         flat = lambda x: torch.as_tensor(x.reshape(T * N, *x.shape[2:]), device=args.device)  # noqa: E731
         stats = update(
@@ -101,6 +107,8 @@ def train(args: argparse.Namespace) -> None:
             "env_steps": step * T * N,
             "elapsed_s": round(time.perf_counter() - started, 1),
             "intrinsic_per_placement": intrinsic / max(placements, 1),
+            # Excludes top-outs, so it compares across death accountings.
+            "alive_per_placement": alive / max(placements - deaths, 1),
             "deaths_per_1k_steps": 1000.0 * deaths / (T * N),
             **{f"loss_{k}": v for k, v in stats.items()},
             **{f"game_{k}": v for k, v in tracker.summary().items()},
@@ -115,6 +123,7 @@ def train(args: argparse.Namespace) -> None:
             print(
                 f"upd {step:4d}/{total_updates}  steps {record['env_steps']:>9,}  "
                 f"intrinsic/pl {record['intrinsic_per_placement']:+.3f}  "
+                f"alive/pl {record['alive_per_placement']:+.3f}  "
                 f"deaths/pc {record['game_top_outs_per_piece']:.4f}  "
                 f"lines/pc {record['game_lines_per_piece']:.4f}  "
                 f"ent {stats['entropy']:.2f}  {record['elapsed_s']:.0f}s",
@@ -135,6 +144,8 @@ def main() -> None:
     p.add_argument("--horizon", type=int, default=2)
     p.add_argument("--gamma", type=float, default=0.99)
     p.add_argument("--lam", type=float, default=0.95)
+    p.add_argument("--lam-step", type=float, default=1.0)
+    p.add_argument("--death", choices=("absorbing", "one_step"), default="absorbing")
     p.add_argument("--lr", type=float, default=2.5e-4)
     p.add_argument("--entropy", type=float, default=0.01)
     p.add_argument("--seed", type=int, default=0)

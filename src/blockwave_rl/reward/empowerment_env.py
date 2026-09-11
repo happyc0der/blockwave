@@ -18,6 +18,16 @@ zero control: no futures remain, so raw empowerment is log(1 + 0) = 0. That is
 not an injected death penalty; it is what the principle says a dead board is
 worth.
 
+*How long* it is worth nothing is the ``death`` setting. ``"one_step"`` charges
+zero control for one placement. It was the first accounting, and a learner
+that credited moves better found its flaw: once a board was doomed, dying fast
+beat lingering, because the soft reset hands back full control — the
+fresh-start bonus the soft reset exists to deny, returning through the value
+function. ``"absorbing"`` (the default) charges zero control for every
+placement the dead game would have had; see `HorizonEmpowermentReward.death`.
+The episode still does not terminate and the learner still bootstraps through
+the reset.
+
 Reads `top_out` from `info` — an observable event, not score. Never reads
 score, lines or level.
 """
@@ -46,9 +56,22 @@ class StepResult:
     info: dict             # evaluation only — the learner must not read it
 
 
+DEATH_ACCOUNTING = ("absorbing", "one_step")
+
+
 class EmpowermentEnv:
-    def __init__(self, horizon: int = 2, config: EnvConfig | None = None) -> None:
+    def __init__(
+        self,
+        horizon: int = 2,
+        config: EnvConfig | None = None,
+        death: str = "absorbing",
+        gamma: float = 0.99,
+    ) -> None:
+        if death not in DEATH_ACCOUNTING:
+            raise ValueError(f"death must be one of {DEATH_ACCOUNTING}")
         self.horizon = horizon
+        self.death = death
+        self.gamma = gamma
         base = config or EnvConfig(obs_mode=ObsMode.BOARD_STATE, agent_hz=20, gravity_scale=4.0)
         base.obs_mode = ObsMode.BOARD_STATE
         self.env = BlockwaveEnv(base)
@@ -102,8 +125,8 @@ class EmpowermentEnv:
         if top_out:
             # Zero reachable futures. The board on screen is already the fresh
             # one, so score the *event*, not the board.
-            key = tuple(self._queue()[: self.horizon])
-            reward = 0.0 - self.reward_fn._baseline(key)
+            gamma = self.gamma if self.death == "absorbing" else None
+            reward = self.reward_fn.death(self._queue(), gamma)
         elif locked:
             reward = self.reward_fn(list(self.env.engine.board.rows), self._queue())
 

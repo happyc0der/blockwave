@@ -66,3 +66,40 @@ def test_matches_standard_gae_when_every_step_locks():
         last = delta + 0.99 * 0.95 * last
         ref[t] = last
     np.testing.assert_allclose(ours[:, 0], ref, rtol=1e-5)
+
+
+def test_lam_step_defaults_to_the_sampled_return_inside_a_piece():
+    rng = np.random.default_rng(2)
+    rewards = rng.normal(size=(12, 2)).astype(np.float32)
+    values = rng.normal(size=(12, 2)).astype(np.float32)
+    locked = rng.random((12, 2)) < 0.25
+    a, _ = gae(rewards, values, np.zeros(2), locked, 0.99, 0.95)
+    b, _ = gae(rewards, values, np.zeros(2), locked, 0.99, 0.95, lam_step=1.0)
+    np.testing.assert_array_equal(a, b)
+
+
+def test_lam_step_is_ordinary_undiscounted_gae_inside_a_piece():
+    """Between locks there is no discount, so the trace is gamma=1, lambda=lam_step."""
+    rng = np.random.default_rng(3)
+    rewards = np.zeros((10, 1), dtype=np.float32)
+    values = rng.normal(size=(10, 1)).astype(np.float32)
+    nv = np.array([0.7], dtype=np.float32)
+    ours, _ = gae(rewards, values, nv, np.zeros((10, 1), dtype=bool), 0.5, 0.5, lam_step=0.8)
+
+    ref, last = np.zeros(10), 0.0
+    for t in reversed(range(10)):
+        nxt = nv[0] if t == 9 else values[t + 1, 0]
+        last = (nxt - values[t, 0]) + 0.8 * last
+        ref[t] = last
+    np.testing.assert_allclose(ours[:, 0], ref, rtol=1e-5)
+
+
+def test_lam_step_never_touches_the_discount():
+    """With a perfect critic every TD error is zero, whatever the trace decay."""
+    locked = np.array([[False], [False], [True], [False], [True]])
+    rewards = one_env(0, 0, -1, 0, -2)
+    # Exact per-placement values for this trajectory, with gamma = 0.5.
+    values = one_env(-1 + 0.5 * -2, -1 + 0.5 * -2, -1 + 0.5 * -2, -2, -2)
+    for lam_step in (1.0, 0.9, 0.5):
+        adv, _ = gae(rewards, values, np.zeros(1), locked, 0.5, 0.95, lam_step=lam_step)
+        np.testing.assert_allclose(adv[:, 0], 0.0, atol=1e-6)

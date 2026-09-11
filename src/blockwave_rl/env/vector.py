@@ -24,10 +24,10 @@ class Batch:
     info: list[dict]        # evaluation only
 
 
-def _worker(conn, count: int, horizon: int, seed: int) -> None:
+def _worker(conn, count: int, horizon: int, seed: int, env_kwargs: dict) -> None:
     from ..reward.empowerment_env import EmpowermentEnv
 
-    envs = [EmpowermentEnv(horizon=horizon) for _ in range(count)]
+    envs = [EmpowermentEnv(horizon=horizon, **env_kwargs) for _ in range(count)]
     try:
         while True:
             command, payload = conn.recv()
@@ -44,7 +44,7 @@ def _worker(conn, count: int, horizon: int, seed: int) -> None:
 
 
 class ProcessVecEnv:
-    def __init__(self, n_envs: int, n_workers: int, horizon: int = 2, seed: int = 0) -> None:
+    def __init__(self, n_envs: int, n_workers: int, horizon: int = 2, seed: int = 0, **env_kwargs) -> None:
         if n_envs % n_workers:
             raise ValueError("n_envs must divide evenly across workers")
         self.n_envs = n_envs
@@ -54,7 +54,7 @@ class ProcessVecEnv:
         self._procs = []
         for w in range(n_workers):
             parent, child = ctx.Pipe()
-            proc = ctx.Process(target=_worker, args=(child, per, horizon, seed + w * 10_000), daemon=True)
+            proc = ctx.Process(target=_worker, args=(child, per, horizon, seed + w * 10_000, env_kwargs), daemon=True)
             proc.start()
             child.close()
             self._conns.append(parent)

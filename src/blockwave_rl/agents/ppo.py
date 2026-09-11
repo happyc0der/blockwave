@@ -4,16 +4,20 @@ PPO rather than DQN because the reward is computed at collection time and
 consumed immediately; an off-policy replay buffer would carry stale rewards.
 
 **The discount clock ticks per placement, not per agent step.** Reward arrives
-only when a piece locks, so both gamma and lambda are applied only on steps
-where a placement happened (``locked``), and are 1.0 in between. Two
-consequences, both intended:
+only when a piece locks, so gamma is applied only on steps where a placement
+happened (``locked``) and is 1.0 in between. With a per-tick discount and
+non-positive rewards, dragging a piece out would *postpone* its negative reward
+and look better; per placement, stalling is neutral.
 
-* Stalling is neutral. With a per-tick discount and non-positive rewards,
-  dragging a piece out would *postpone* its negative reward and look better.
-* Credit is shared fairly within a piece. The lock's TD error propagates back
-  undiminished to every action that shaped the piece — the rotation three ticks
-  earlier matters as much as the final drop. A per-tick lambda would give early
-  actions exponentially less credit.
+**Lambda is a separate question.** Gamma is a preference — how much the future
+matters — and belongs to placements. Lambda is only a bias/variance dial: how far
+to trust sampled returns over the critic. By default (``lam_step=1``) it too
+applies only at locks, so inside a piece every action is credited with the
+piece's whole sampled outcome. That is unbiased, but a piece a stalling policy
+drags out over ~80 ticks shares one outcome among ~80 mostly random actions.
+``lam_step < 1`` decays the trace per tick inside a piece, crediting each action
+more by the change in the critic's estimate it caused. It does not change what is
+optimal: per-tick lambda never touches the discount.
 """
 
 from __future__ import annotations
@@ -29,6 +33,7 @@ from torch import nn
 class PPOConfig:
     gamma: float = 0.99          # per placement
     lam: float = 0.95            # per placement
+    lam_step: float = 1.0        # per tick inside a piece; 1.0 = pure sampled return
     clip: float = 0.2
     epochs: int = 4
     minibatches: int = 4
@@ -38,17 +43,18 @@ class PPOConfig:
     max_grad: float = 0.5
 
 
-def gae(rewards, values, next_value, locked, gamma, lam):
+def gae(rewards, values, next_value, locked, gamma, lam, lam_step=1.0):
     """Generalized advantage estimation with a per-step, placement-gated discount.
 
     All arrays are (T, N). ``locked[t]`` says a placement happened during step t,
-    so the discount and trace decay apply when bootstrapping past it.
+    so the discount and the per-placement trace decay apply when bootstrapping
+    past it; ``lam_step`` is the trace decay on every other step.
     """
     T = rewards.shape[0]
     adv = np.zeros_like(rewards)
     last = np.zeros(rewards.shape[1], dtype=np.float32)
     g = np.where(locked, gamma, 1.0).astype(np.float32)
-    l = np.where(locked, lam, 1.0).astype(np.float32)
+    l = np.where(locked, lam, lam_step).astype(np.float32)
     for t in reversed(range(T)):
         nxt = next_value if t == T - 1 else values[t + 1]
         delta = rewards[t] + g[t] * nxt - values[t]

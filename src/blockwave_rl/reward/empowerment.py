@@ -23,6 +23,7 @@ placement good — only how many there are.
 
 from __future__ import annotations
 
+import itertools
 import math
 
 import numpy as np
@@ -205,6 +206,7 @@ class HorizonEmpowermentReward:
     def __init__(self, horizon: int = 2) -> None:
         self.horizon = horizon
         self._baselines: dict[tuple[PieceType, ...], float] = {}
+        self._mean_baseline: float | None = None
 
     def _baseline(self, queue: tuple[PieceType, ...]) -> float:
         value = self._baselines.get(queue)
@@ -216,3 +218,61 @@ class HorizonEmpowermentReward:
     def __call__(self, rows: list[int], queue: list[PieceType]) -> float:
         key = tuple(queue[: self.horizon])
         return horizon_empowerment(rows, list(key)) - self._baseline(key)
+
+    def mean_baseline(self) -> float:
+        """E[E(empty, queue)] over the 7-bag's stationary queue windows."""
+        if self._mean_baseline is None:
+            self._mean_baseline = sum(p * self._baseline(w) for w, p in bag_windows(self.horizon).items())
+        return self._mean_baseline
+
+    def death(self, queue: list[PieceType], gamma: float | None = None) -> float:
+        """The reward for a top-out: zero reachable futures, raw empowerment 0.
+
+        ``gamma=None`` charges that once: ``-E(empty, queue)``. That was the
+        first accounting, and a better learner found its flaw — it made hurrying
+        a doomed game to its end the reward-optimal move. After a soft reset the
+        next game starts at full control, so one charge of zero control is
+        cheaper than lingering on a dangerous board and dying anyway.
+
+        With ``gamma`` it charges what the dead game would have scored had it
+        gone on: zero control now, and at every later placement,
+
+            -E(empty, queue) - gamma * mean_baseline / (1 - gamma)
+
+        That is the smallest charge under which one more placement alive is
+        never worse, in expectation over the next queue, than dying now — for
+        every board, since a live placement scores at least -E(empty, queue).
+        """
+        key = tuple(queue[: self.horizon])
+        charge = -self._baseline(key)
+        if gamma is None:
+            return charge
+        return charge - gamma * self.mean_baseline() / (1.0 - gamma)
+
+
+def bag_windows(horizon: int) -> dict[tuple[PieceType, ...], float]:
+    """Exact probability of each ``horizon``-piece window under the 7-bag.
+
+    A window starts at a uniformly random position within a bag. The pieces it
+    takes from each bag are a uniformly random ordered selection of distinct
+    types, and consecutive bags are independent.
+    """
+    if not 1 <= horizon <= 7:
+        raise ValueError("a window must fit within two bags")
+    types = list(PieceType)
+    n = len(types)
+
+    def ordered(k: int) -> float:
+        return 1.0 / math.perm(n, k)
+
+    out: dict[tuple[PieceType, ...], float] = {}
+    for window in itertools.product(types, repeat=horizon):
+        total = 0.0
+        for start in range(n):
+            k = min(horizon, n - start)
+            head, tail = window[:k], window[k:]
+            if len(set(head)) == len(head) and len(set(tail)) == len(tail):
+                total += ordered(len(head)) * ordered(len(tail))
+        if total:
+            out[window] = total / n
+    return out
