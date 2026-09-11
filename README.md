@@ -312,8 +312,11 @@ The reward is **empowerment**: how many distinct futures the agent's key
 presses can still reach, computed with the real simulator as a perfect model of
 the game. The agent presses real keys, one per decision. It currently reads the
 true board rather than pixels, as a feasibility check; learning from pixels is
-the next stage. After 50M steps it clears 0.08 lines per piece (mean of three seeds). A scripted
-heuristic clears 0.39, and the strongest trivial baseline 0.002.
+the next stage.
+
+After 150M steps it clears 0.16 lines per piece and survives ~70 pieces per
+game, still improving when the run ended. A scripted heuristic clears 0.39 and
+never tops out; the strongest trivial baseline clears 0.002.
 
 [RESEARCH.md](RESEARCH.md) records every approach tried, including the ones
 that failed and why.

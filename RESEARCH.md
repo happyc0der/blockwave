@@ -275,3 +275,35 @@ it reads the engine's hole count, which the agent never sees.
   low board that means tens of pieces ahead, far beyond what exact counting can
   afford.
 
+
+## 5. Where is the ceiling? Not at 150M steps
+
+The 10M and 50M runs both flattened exactly as their learning rate reached
+zero, so neither measured saturation. This run holds the rate for the first 80%
+of 150M steps and decays it over the last 20% (`--lr-decay-start 0.8`), same
+configuration otherwise, seed 0, ~4.5 hours. Held-out, complete games:
+
+| checkpoint | env steps | lines/piece | gain | deaths/piece | pieces/game | games |
+|---|---|---|---|---|---|---|
+| 2000 | 24.6M | 0.0642 ± 0.0009 | | 0.0216 | 46.2 | 1590 |
+| 4000 | 49.2M | 0.0967 ± 0.0009 | +0.0325 | 0.0191 | 52.3 | 1398 |
+| 6000 | 73.7M | 0.1154 ± 0.0011 | +0.0188 | 0.0176 | 56.7 | 1311 |
+| 8000 | 98.3M | 0.1342 ± 0.0014 | +0.0188 | 0.0164 | 60.9 | 1159 |
+| 10000 | 122.9M | 0.1416 ± 0.0013 | +0.0073 | 0.0159 | 62.8 | 1111 |
+| 12000 | 147.5M | **0.1629 ± 0.0013** | +0.0213 | **0.0144** | **69.6** | 1065 |
+
+**No ceiling.** Gains slowed but never stopped, and the largest single gain of
+the second half came last, during the decay. 0.163 lines per piece is 41% of
+the heuristic's 0.393, and double the 50M result.
+
+**The schedule really was the limit at 50M.** At the same 49.2M steps this run
+scores 0.0967 with its rate still at full, against 0.0923 for the 50M run whose
+rate had just annealed to zero — so annealing bought that run nothing, and the
+flattening was the schedule ending, not learning saturating.
+
+A final game: `runs/abs5hz_150m_seed0/ckpt_12207_game.mp4`, 1,674 decisions and
+13 lines, against 2 lines for the 50M agent's game. Still the first complete
+game on the held-out seed, never the best one.
+
+What this does not answer is where it does saturate, or whether the seed spread
+(±10% at 50M) holds at this length: this is one seed.
