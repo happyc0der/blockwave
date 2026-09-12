@@ -328,9 +328,9 @@ still improving when the run ended.
 
 The **pixel** track is the deliverable: the agent sees only the screen, so it
 cannot borrow the simulator either. It learns what its own key presses do by
-trying them, and counts futures through that model. At 10M steps it clears
-0.024 lines per piece and survives 35.7 pieces per game — matching the
-board-state agent at the same budget (0.021, 35.5), from frames alone.
+trying them, and counts futures through that model. At 50M steps it clears 0.090
+lines per piece and survives 50.6 pieces per game — within a few percent of the
+privileged board-state agent at the same budget, from frames alone.
 
 A scripted heuristic clears 0.39 and never tops out; the strongest trivial
 baseline clears 0.002 and survives 20.

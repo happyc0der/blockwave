@@ -478,3 +478,39 @@ reward exactly where the agent is heading, without anything failing. Measured on
 
 No drift worth acting on at this level of play. Worth re-checking at higher
 skill, where boards stay flatter for longer than anything in the corpus.
+
+### 50M steps from pixels
+
+Same configuration, five times the length: 8,138 updates, 5.2 hours, seed 0.
+Held out, complete games, the fixed schedule:
+
+| checkpoint | env steps | lines/piece | deaths/piece | pieces/game | games |
+|---|---|---|---|---|---|
+| 2000 | 12.3M | 0.0237 ± 0.0008 | 0.0272 | 36.7 | 915 |
+| 4000 | 24.6M | 0.0500 ± 0.0012 | 0.0236 | 42.4 | 691 |
+| 6000 | 36.9M | 0.0559 ± 0.0012 | 0.0232 | 43.2 | 794 |
+| 8000 | 49.2M | **0.0901 ± 0.0013** | **0.0198** | **50.6** | 649 |
+
+Against the 10M pixel run (0.0239, 35.7): 3.8x the line rate and fifteen more
+pieces per game. Against the drift baseline: fifty times the line rate and two
+and a half times the game length. It is 23% of the scripted heuristic.
+
+**Compared with the privileged track, carefully.** The board-state agent's three
+50M seeds averaged 0.0834 and 49.9 at the same step count, which this nominally
+beats — but those runs decayed their learning rate from the first update while
+this one held it to 80%, and schedule was worth a lot on that track. The fair
+comparison is the board-state 150M run, which used this schedule shape: at
+49.2M it read 0.0967 and 52.3. So the pixel agent is about 7% behind the
+privileged agent on lines and 3% behind on survival, at equal steps.
+
+That is the result worth stating plainly: **learning from the screen, with a
+reward derived from a model of its own key presses, costs a few percent against
+reading the true board with a reward computed exactly by the simulator.**
+
+**The model did not go stale.** Re-measured on 3,000 transitions from this
+agent's own play, at a level far above anything in the babbling corpus: skill
+0.552, true-program rank 4.31 of 44, fatal programs caught 0.521 — the same
+numbers as on the corpus it was fitted to. The reward held its accuracy where
+the agent went.
+
+Still one seed, and the board-state seeds spread about 10% at this length.
