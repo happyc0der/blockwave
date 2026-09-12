@@ -461,3 +461,20 @@ down and back up. Progress here is not monotonic.
 A game: `runs/pixel_ppo_seed0/ckpt_01627_game.mp4` — 1,062 decisions, 2 lines,
 the first complete game on the held-out seed as always. The agent sees the small
 88x88 grey crop; the video is the same game drawn at human size.
+
+### Does the model go stale as the agent improves?
+
+The world model is fitted once, while babbling — near-random play. A trained
+agent visits different boards, and a model that is worse there would degrade the
+reward exactly where the agent is heading, without anything failing. Measured on
+3,000 transitions taken from the 10M agent's own play (`world.shift`):
+
+| | babbling, held out | the agent's states |
+|---|---|---|
+| skill vs "nothing changes" | 0.546 | 0.550 |
+| identifies which program ran | 0.192 | 0.188 |
+| mean rank of the true program | 4.61 of 44 | 4.56 of 44 |
+| fatal programs caught | 0.504 | 0.564 |
+
+No drift worth acting on at this level of play. Worth re-checking at higher
+skill, where boards stay flatter for longer than anything in the corpus.
