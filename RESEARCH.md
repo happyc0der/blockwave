@@ -427,3 +427,37 @@ correctly and does so from pixels alone.
 
 Next: PPO on this reward, the same learner and the same protocol as the
 board-state track, with game score reported and never used.
+
+### Training on it
+
+PPO on the pixel reward, same learner and protocol as the board-state track:
+5 Hz, 10M steps, 48 envs, seed 0, the learning rate held for 80% of the run.
+58 minutes at ~2,500 steps/sec. Held out, complete games, the fixed checkpoint
+schedule:
+
+| checkpoint | env steps | lines/piece | deaths/piece | pieces/game | games |
+|---|---|---|---|---|---|
+| 400 | 2.5M | 0.0124 ± 0.0006 | 0.0324 | 30.9 | 1035 |
+| 800 | 4.9M | 0.0087 ± 0.0005 | 0.0354 | 28.3 | 1044 |
+| 1200 | 7.4M | 0.0164 ± 0.0008 | 0.0304 | 32.9 | 895 |
+| 1600 | 9.8M | **0.0239 ± 0.0008** | **0.0280** | **35.7** | 933 |
+| drift, measured through pixels | | 0.0018 ± 0.0003 | 0.0508 | 19.7 | 1880 |
+
+**It matches the board-state agent.** At the same 10M steps that agent — reading
+true occupancy, with the reward counted exactly by the simulator — reached
+0.0206 lines per piece and 35.5 pieces per game across three seeds. This one
+reaches 0.0239 and 35.7 from frames alone, through a model of its own keys.
+Thirteen times the drift baseline's line rate, and 1.8x its game length.
+
+Two honest qualifications. The schedules differ — the board-state 10M runs
+decayed their learning rate from the first update, this one held it to 80% —
+so the fair reading is "the same ballpark at the same budget", not "better".
+And this is one seed; the board-state seeds spread by about ±10% at this length.
+
+The dip at checkpoint 800 is real rather than measurement noise: the training
+curve flattened over the same stretch, and the held-out numbers followed it
+down and back up. Progress here is not monotonic.
+
+A game: `runs/pixel_ppo_seed0/ckpt_01627_game.mp4` — 1,062 decisions, 2 lines,
+the first complete game on the held-out seed as always. The agent sees the small
+88x88 grey crop; the video is the same game drawn at human size.

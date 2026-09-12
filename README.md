@@ -308,15 +308,32 @@ uv run python -m blockwave_rl.evaluate runs/demo drift random --agent-hz 5 --eve
 uv run python -m blockwave_rl.watch runs/demo/ckpt_00813.pt   # one game as video; needs ffmpeg
 ```
 
-The reward is **empowerment**: how many distinct futures the agent's key
-presses can still reach, computed with the real simulator as a perfect model of
-the game. The agent presses real keys, one per decision. It currently reads the
-true board rather than pixels, as a feasibility check; learning from pixels is
-the next stage.
+The pixel track has its own chain — representation, world model, training —
+each stage gated before the next begins:
 
-After 150M steps it clears 0.16 lines per piece and survives ~70 pieces per
-game, still improving when the run ended. A scripted heuristic clears 0.39 and
-never tops out; the strongest trivial baseline clears 0.002.
+```bash
+uv run python -m blockwave_rl.repr.pixel_gate --out runs/pixel    # encoder + probe thresholds
+uv run python -m blockwave_rl.world.fit --out runs/pixel          # learn what the keys do
+uv run python -m blockwave_rl.world.rank --out runs/pixel         # must beat every exploit
+uv run python -m blockwave_rl.world.train_pixel --out runs/pixel_ppo --reward runs/pixel
+```
+
+The reward is **empowerment**: how many distinct futures the agent's key
+presses can still reach. The agent presses real keys, one per decision.
+
+There are two tracks. The **board-state** track reads true occupancy and counts
+futures exactly with the simulator — a feasibility check for the reward. After
+150M steps it clears 0.16 lines per piece and survives ~70 pieces per game,
+still improving when the run ended.
+
+The **pixel** track is the deliverable: the agent sees only the screen, so it
+cannot borrow the simulator either. It learns what its own key presses do by
+trying them, and counts futures through that model. At 10M steps it clears
+0.024 lines per piece and survives 35.7 pieces per game — matching the
+board-state agent at the same budget (0.021, 35.5), from frames alone.
+
+A scripted heuristic clears 0.39 and never tops out; the strongest trivial
+baseline clears 0.002 and survives 20.
 
 [RESEARCH.md](RESEARCH.md) records every approach tried, including the ones
 that failed and why.
