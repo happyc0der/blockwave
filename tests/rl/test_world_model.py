@@ -139,3 +139,34 @@ def test_the_reward_is_the_same_twice():
     reward.calibrate(np.zeros((1, 4), dtype=np.float32), width=1.0)
     state = np.linspace(-1, 1, 4, dtype=np.float32)[None]
     assert reward(state)[0] == reward(state)[0]
+
+
+def test_choose_width_takes_the_most_informative_candidate():
+    """It picks the width whose reward says the most, among those it considers.
+
+    Only among those: whether the best width is interior depends on the model.
+    It is for a trained one — the sweep in RESEARCH.md shows the count collapsing
+    at wide settings and every future looking distinct at narrow ones — but an
+    untrained model has no such optimum, and this promises only the contract.
+    """
+    torch.manual_seed(0)
+    model = MacroModel(latent_dim=6)
+    reward = PixelEmpowerment(model, horizon=1, width=1.0)
+    empty = np.zeros((1, 6), dtype=np.float32)
+    states = np.random.default_rng(0).normal(size=(64, 6)).astype(np.float32) * 3.0
+
+    scales = (1.0, 0.5, 0.25, 0.125)
+    chosen = reward.choose_width(states, empty, scales=scales, width=8.0)
+    assert chosen in [8.0 * s for s in scales]
+    assert reward.width == chosen
+    best = np.std(reward(states))
+    for scale in scales:
+        reward.calibrate(empty, 8.0 * scale)
+        assert np.std(reward(states)) <= best + 1e-9
+
+
+def test_the_count_never_exceeds_the_futures_counted():
+    """At a tiny width the off-diagonal kernel underflows; the count must hold."""
+    points = torch.randn(2, 16, 4) * 10.0
+    weights = torch.ones(2, 16)
+    assert float(effective_count(points, weights, width=1e-6).max()) <= 16.0

@@ -120,3 +120,81 @@ def collect(
         after=stacked[1::2].astype(np.float32),
         died=np.array(deaths, dtype=bool),
     )
+
+
+def collect_to_disk(
+    path,
+    n_pieces: int,
+    *,
+    seed: int = 0,
+    agent_hz: float = 5.0,
+    gravity_scale: float = 4.0,
+    cell_px: int = 4,
+    progress: int = 0,
+):
+    """Babble, keeping the frames themselves rather than their latents.
+
+    `collect` encodes as it goes, which is all the forward model needs. Training
+    an *encoder* on this data needs the pixels, and at 88x88 a hundred thousand
+    pairs is gigabytes — so they go to a memory-mapped file on disk rather than
+    into RAM.
+
+    Returns the open memmaps: (before, after, macro, died).
+    """
+    from pathlib import Path
+
+    from ..env.base import BlockwaveEnv, EnvConfig, ObsMode
+    from ..env.crops import Variant
+
+    path = Path(path)
+    path.mkdir(parents=True, exist_ok=True)
+    env = BlockwaveEnv(
+        EnvConfig(
+            obs_mode=ObsMode.PIXELS, variant=Variant.BOARD_PLUS_PREVIEW, cell_px=cell_px,
+            agent_hz=agent_hz, gravity_scale=gravity_scale, frame_stack=1,
+        )
+    )
+    env.reset(seed=seed)
+    events = FrameEvents(env.layout, env.crop)
+    events.calibrate(env._pixels())
+    rng = np.random.default_rng(seed)
+    shape = env.crop.shape
+
+    before = np.lib.format.open_memmap(path / "before.npy", mode="w+", dtype=np.uint8, shape=(n_pieces, *shape))
+    after = np.lib.format.open_memmap(path / "after.npy", mode="w+", dtype=np.uint8, shape=(n_pieces, *shape))
+    macros = np.zeros(n_pieces, dtype=np.int64)
+    deaths = np.zeros(n_pieces, dtype=bool)
+
+    frame = env._pixels()
+    kept = 0
+    while kept < n_pieces:
+        macro = int(rng.integers(N_MACROS))
+        actions = MACROS[macro].actions
+        start = frame
+        died = False
+        resolved = False
+        for step in range(MAX_STEPS_PER_PIECE):
+            action = actions[step] if step < len(actions) else int(actions[-1])
+            env.step(action)
+            current = env._pixels()
+            placed, ended = events.observe(frame, current, action)
+            frame = current
+            died |= ended
+            if placed or ended:
+                resolved = True
+                break
+        if not resolved:
+            continue
+        before[kept] = start
+        after[kept] = frame
+        macros[kept] = macro
+        deaths[kept] = died
+        kept += 1
+        if progress and kept % progress == 0:
+            print(f"  {kept:,}/{n_pieces:,} macros tried", flush=True)
+
+    before.flush()
+    after.flush()
+    np.save(path / "macro.npy", macros)
+    np.save(path / "died.npy", deaths)
+    return before, after, macros, deaths

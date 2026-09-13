@@ -39,11 +39,17 @@ FLOOR = 1.0
 
 
 def effective_count(points: torch.Tensor, weights: torch.Tensor, width: float) -> torch.Tensor:
-    """(B, N, D), (B, N) -> (B,) effective number of distinct points."""
+    """(B, N, D), (B, N) -> (B,) effective number of distinct points.
+
+    Bounded above by the number of points, which the arithmetic already implies
+    but floating point does not: at a very small width the off-diagonal kernel
+    underflows and the ratio can drift past N.
+    """
     distance = torch.cdist(points, points)
     kernel = torch.exp(-0.5 * (distance / width) ** 2)
     weighted = torch.einsum("bi,bj,bij->b", weights, weights, kernel)
-    return weights.sum(dim=1).pow(2) / weighted.clamp(min=1e-9)
+    count = weights.sum(dim=1).pow(2) / weighted.clamp(min=1e-9)
+    return count.clamp(max=float(points.shape[1]))
 
 
 class PixelEmpowerment:
@@ -99,19 +105,42 @@ class PixelEmpowerment:
     def calibrate(self, empty_latent: np.ndarray, width: float) -> None:
         """Set the kernel width and the empty-board baseline.
 
-        The width is the model's own held-out error: two predicted futures count
-        as the same outcome when they are closer together than the model can
-        resolve. That is not a free knob — it falls out of how well the agent
-        has learned its own keys, and it tightens as the model improves.
+        Many programs genuinely land on the same placement (five steps left and
+        four, when only three fit), and those coincidences are what the count is
+        *for*: futures the agent cannot tell apart are futures it cannot choose
+        between.
 
-        Many programs genuinely do land on the same placement (five steps left
-        and four, when only three fit), and those coincidences are what the
-        count is *for*: they are the futures the agent cannot tell apart, and
-        therefore cannot choose between.
+        Passing the model's mean squared error here was a mistake worth
+        recording. That mean is inflated by a tail of badly predicted states, and
+        at that width the measure collapsed 528 predicted futures into fewer than
+        two on a typical board — the reward blinded itself, and no improvement to
+        the model could have shown up through it. Prefer `choose_width`.
         """
         self.width = max(float(width), 1e-3)
         self._baseline = None
         self._baseline = float(self.raw(empty_latent)[0])
+
+    def choose_width(self, latents: np.ndarray, empty_latent: np.ndarray,
+                     scales: tuple[float, ...] = (1.0, 0.5, 0.25, 0.125, 0.0625), *, width: float) -> float:
+        """Pick the resolution at which the reward says the most, and calibrate.
+
+        Too wide and every board looks equally controllable; too narrow and every
+        predicted future looks distinct, which is the same blindness from the
+        other side. In between, the count varies across the states the agent
+        actually visits — so take the width whose reward has the largest spread
+        over those states.
+
+        This asks nothing of the simulator and nothing of the score: it is a
+        property of the agent's own model and its own experience.
+        """
+        best, best_spread = None, -np.inf
+        for scale in scales:
+            self.calibrate(empty_latent, width * scale)
+            spread = float(np.std(self(latents)))
+            if spread > best_spread:
+                best, best_spread = width * scale, spread
+        self.calibrate(empty_latent, best)
+        return best
 
     @property
     def baseline(self) -> float:
