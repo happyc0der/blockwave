@@ -119,7 +119,9 @@ def main() -> None:
 
         run = Path(target)
         config = json.loads((run / "config.json").read_text())
-        checkpoints = sorted(run.glob("ckpt_*.pt"))
+        # `ckpt_*.pt` is what training writes; `policy.pt` is what a shipped
+        # agent is called, so a pretrained directory evaluates like a run.
+        checkpoints = sorted(run.glob("ckpt_*.pt")) or sorted(run.glob("policy.pt"))
         checkpoints = checkpoints[args.every - 1 :: args.every] if args.every > 1 else checkpoints
         stack = int(config.get("frame_stack", 4))
         with (run / "eval.jsonl").open("w") as log:

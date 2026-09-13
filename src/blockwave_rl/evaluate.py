@@ -302,7 +302,9 @@ def main() -> None:
         horizon = config["horizon"]
         # The policy is evaluated in the dynamics it was trained in.
         dynamics = dict(agent_hz=config.get("agent_hz", 20.0), gravity_scale=config.get("gravity", 4.0))
-        ckpts = sorted(run.glob("ckpt_*.pt"))
+        # `ckpt_*.pt` is what training writes; `policy.pt` is what a shipped
+        # agent is called, so a pretrained directory evaluates like a run.
+        ckpts = sorted(run.glob("ckpt_*.pt")) or sorted(run.glob("policy.pt"))
         ckpts = ckpts[args.every - 1 :: args.every] if args.every > 1 else ckpts
         with (run / "eval.jsonl").open("w") as log:
             for ckpt in ckpts:

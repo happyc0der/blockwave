@@ -22,3 +22,6 @@ run.json
 
 # Training artifacts
 runs/
+
+# Evaluation output written next to a shipped agent
+pretrained/**/eval.jsonl

@@ -301,43 +301,100 @@ fails if any other module does. The package depends on the game, never the
 reverse, and `torch` is an optional extra, so installing the game does not pull
 it in.
 
+The reward is **empowerment**: how many distinct futures the agent's key presses
+can still reach. A board it can still do many different things with is worth
+more than one where its options have collapsed. Nothing in that mentions lines,
+and the agent is never told it scored.
+
+There are two tracks:
+
+- The **board-state** track reads the true occupancy grid and counts futures
+  exactly, with the simulator. It is a feasibility check for the reward.
+- The **pixel** track is the deliverable. It sees an 88×88 crop of the screen
+  and nothing else, so it cannot borrow the simulator either: it learns what its
+  own key presses do by trying them, and counts futures through that model.
+
+### How the agent is doing
+
+Every number is measured on **seeds never used in training**, over complete
+games, at checkpoints fixed in advance — never picked for looking good. Lines
+per piece is the yardstick because it is scale-free: a piece is four cells and a
+line is ten, so 0.4 is the ceiling for perfect play with no wasted cells.
+
+| policy | lines per piece | pieces per game | what it is |
+|---|---|---|---|
+| random keys | 0.0000 | 12.2 | the floor |
+| never hard-drops ("drift") | 0.0018 | 19.7 | the strongest trivial policy, and the real bar |
+| board-state agent, 10M steps | 0.0206 | 35.5 | 3 seeds |
+| board-state agent, 50M steps | 0.0834 | 49.9 | 3 seeds |
+| board-state agent, 150M steps | 0.1629 | 69.6 | 1 seed |
+| **pixel agent, 10M steps** | 0.0239 | 35.7 | from the screen alone |
+| **pixel agent, 50M steps** | 0.0901 | 50.6 | |
+| **pixel agent, 150M steps** | 0.0959 | 51.6 | 3× the compute bought 6% |
+| scripted heuristic | 0.393 | never tops out | a reference player, not learned |
+
+Read it this way. The drift baseline is what you get for free by never pressing
+hard drop, and beating *random* means nothing next to it. The pixel agent reaches
+about a quarter of the scripted player's line rate and survives around fifty
+pieces a game, having been told nothing about Tetris: it worked out what its keys
+do by pressing them, and what "doing well" means from what it could see.
+
+The two tracks are within a few percent of each other at 50M steps, which is the
+result worth noting — seeing only the screen costs surprisingly little against
+reading the true board. They diverge afterwards, and
+[RESEARCH.md](RESEARCH.md) explains why: the pixel reward can only count futures
+its learned model can tell apart, and that resolution, not compute, is its
+ceiling.
+
+### Follow along
+
 ```bash
 uv sync --extra dev --extra rl
-uv run python -m blockwave_rl.train --out runs/demo --agent-hz 5 --steps 10000000   # ~15-20 min on an M4 Pro
-uv run python -m blockwave_rl.evaluate runs/demo drift random --agent-hz 5 --every 8
-uv run python -m blockwave_rl.watch runs/demo/ckpt_00813.pt   # one game as video; needs ffmpeg
 ```
 
-The pixel track has its own chain — representation, world model, training —
-each stage gated before the next begins:
+Watch the trained agents play, straight from the clone — no training required.
+`pretrained/pixel` is the 50M-step pixel agent and the reward it learned with;
+`pretrained/board` is the 150M-step board-state agent. Both commands write an
+MP4 of one complete game on a held-out seed, and need `ffmpeg`:
 
 ```bash
-uv run python -m blockwave_rl.repr.pixel_gate --out runs/pixel    # encoder + probe thresholds
-uv run python -m blockwave_rl.world.fit --out runs/pixel          # learn what the keys do
-uv run python -m blockwave_rl.world.rank --out runs/pixel         # must beat every exploit
-uv run python -m blockwave_rl.world.train_pixel --out runs/pixel_ppo --reward runs/pixel
+uv run python -m blockwave_rl.world.watch_pixel pretrained/pixel/policy.pt   # the pixel agent
+uv run python -m blockwave_rl.watch pretrained/board/policy.pt               # the board-state agent
 ```
 
-The reward is **empowerment**: how many distinct futures the agent's key
-presses can still reach. The agent presses real keys, one per decision.
+Check the numbers above for yourself. This plays complete games on held-out
+seeds and prints lines per piece, deaths per piece and pieces per game:
 
-There are two tracks. The **board-state** track reads true occupancy and counts
-futures exactly with the simulator — a feasibility check for the reward. After
-150M steps it clears 0.16 lines per piece and survives ~70 pieces per game,
-still improving when the run ended.
+```bash
+uv run python -m blockwave_rl.world.evaluate_pixel pretrained/pixel drift --reward pretrained/pixel
+```
 
-The **pixel** track is the deliverable: the agent sees only the screen, so it
-cannot borrow the simulator either. It learns what its own key presses do by
-trying them, and counts futures through that model. It clears 0.096 lines per
-piece and survives 51.6 pieces per game — within a few percent of the privileged
-agent at 50M steps, though it saturates there while the privileged one keeps
-improving, because the reward can only count futures its model can tell apart.
+Train one yourself. The pixel track is four stages, each gated before the next
+begins; timings are for an M4 Pro:
 
-A scripted heuristic clears 0.39 and never tops out; the strongest trivial
-baseline clears 0.002 and survives 20.
+```bash
+# 1. can a linear readout of the encoder's latents recover the board?   (~10 min)
+uv run python -m blockwave_rl.repr.pixel_gate --out runs/pixel
+# 2. learn what the key presses do, by trying them                      (~15 min)
+uv run python -m blockwave_rl.world.fit --out runs/pixel
+# 3. does the reward rank competent play above every exploit?           (~5 min)
+uv run python -m blockwave_rl.world.rank --out runs/pixel
+# 4. train the agent on it                                        (~1 h per 10M)
+uv run python -m blockwave_rl.world.train_pixel --out runs/mine --reward runs/pixel --steps 10000000
+uv run python -m blockwave_rl.world.evaluate_pixel runs/mine --reward runs/pixel
+```
 
-[RESEARCH.md](RESEARCH.md) records every approach tried, including the ones
-that failed and why.
+The board-state track is faster (~15 min per 10M steps) and needs no encoder or
+world model:
+
+```bash
+uv run python -m blockwave_rl.train --out runs/board --agent-hz 5 --steps 10000000
+uv run python -m blockwave_rl.evaluate runs/board drift random --agent-hz 5 --every 8
+```
+
+If a stage fails its gate, that is the tool working: each one exists to stop a
+broken reward from being trained on for hours. [RESEARCH.md](RESEARCH.md)
+records every approach tried, including the ones that failed and why.
 
 ## Tests
 

@@ -1,0 +1,21 @@
+{
+  "out": "runs/pixel_ppo_50m_seed0",
+  "reward": "runs/pixel",
+  "steps": 50000000,
+  "envs": 48,
+  "workers": 12,
+  "rollout": 128,
+  "frame_stack": 4,
+  "gamma": 0.99,
+  "lam": 0.95,
+  "lam_step": 1.0,
+  "lr": 0.00025,
+  "lr_decay_start": 0.8,
+  "entropy": 0.01,
+  "agent_hz": 5.0,
+  "gravity": 4.0,
+  "seed": 0,
+  "device": "mps",
+  "save_every": 400,
+  "print_every": 200
+}

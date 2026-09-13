@@ -1,0 +1,21 @@
+{
+  "out": "runs/abs5hz_150m_seed0",
+  "steps": 150000000,
+  "envs": 96,
+  "workers": 12,
+  "rollout": 128,
+  "horizon": 2,
+  "gamma": 0.99,
+  "lam": 0.95,
+  "lam_step": 1.0,
+  "death": "absorbing",
+  "agent_hz": 5.0,
+  "gravity": 4.0,
+  "lr": 0.00025,
+  "lr_decay_start": 0.8,
+  "entropy": 0.01,
+  "seed": 0,
+  "device": "mps",
+  "save_every": 1000,
+  "print_every": 1000
+}
