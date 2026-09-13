@@ -629,3 +629,34 @@ hypothesis, not a finding.
 
 `world.fit` now chooses the width by the spread criterion rather than the mean
 error, since that is the half that helps.
+
+### The flagship, re-trained with the better-calibrated reward
+
+Same configuration as the 50M flagship, changing only the kernel width — the
+half the ablation showed helps. Held out, complete games:
+
+| checkpoint | env steps | lines/piece | pieces/game |
+|---|---|---|---|
+| 800 | 4.9M | 0.0142 ± 0.0008 | 32.1 |
+| 1600 | 9.8M | 0.0200 ± 0.0006 | 35.3 |
+| 3200 | 19.7M | 0.0405 ± 0.0011 | 39.8 |
+| 4800 | 29.5M | 0.0670 ± 0.0014 | 45.4 |
+| 6400 | 39.3M | 0.0541 ± 0.0013 | 42.6 |
+| 8000 | 49.2M | **0.0948 ± 0.0016** | **51.3** |
+
+Against the original flagship's 0.0901 ± 0.0013 and 50.6: about 5% better on
+lines, roughly two standard errors, and 1% on survival. A small win at the end
+of the run.
+
+**The larger effect is on the way there.** At matched steps mid-run the gap was
+22% at 20M and 18% at 35M, and it closed as both runs annealed. So the
+re-calibration buys speed rather than a higher ceiling — which is still worth
+having, because it reaches at 50M what the original reward needed 150M for.
+
+Checkpoint 6400 reads 0.0541 against 0.0682 before it and 0.0747 after. Single
+checkpoints wobble; the training windows over that stretch were flat rather than
+falling, which is why the schedule evaluates several and the table shows them
+all rather than the best.
+
+`pretrained/` now ships this agent with the reward it was trained against, so
+the two stay matched.

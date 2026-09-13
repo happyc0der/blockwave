@@ -331,6 +331,7 @@ line is ten, so 0.4 is the ceiling for perfect play with no wasted cells.
 | **pixel agent, 10M steps** | 0.0239 | 35.7 | from the screen alone |
 | **pixel agent, 50M steps** | 0.0901 | 50.6 | |
 | **pixel agent, 150M steps** | 0.0959 | 51.6 | 3× the compute bought 6% |
+| **pixel agent, 50M, re-calibrated reward** | **0.0948** | **51.3** | what 150M bought before, at a third of the cost — this is the one in `pretrained/` |
 | scripted heuristic | 0.393 | never tops out | a reference player, not learned |
 
 Read it this way. The drift baseline is what you get for free by never pressing
@@ -338,6 +339,11 @@ hard drop, and beating *random* means nothing next to it. The pixel agent reache
 about a quarter of the scripted player's line rate and survives around fifty
 pieces a game, having been told nothing about Tetris: it worked out what its keys
 do by pressing them, and what "doing well" means from what it could see.
+
+The last row is the same agent trained against a better-calibrated version of
+its own reward, which reaches in 50M steps what the original needed 150M for.
+What changed was not the model but how finely the reward counts: see
+[RESEARCH.md](RESEARCH.md).
 
 The two tracks are within a few percent of each other at 50M steps, which is the
 result worth noting — seeing only the screen costs surprisingly little against

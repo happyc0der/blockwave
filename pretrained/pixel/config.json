@@ -1,6 +1,6 @@
 {
-  "out": "runs/pixel_ppo_50m_seed0",
-  "reward": "runs/pixel",
+  "out": "runs/pixel_ppo_50m_width",
+  "reward": "runs/pixel_width_only",
   "steps": 50000000,
   "envs": 48,
   "workers": 12,
