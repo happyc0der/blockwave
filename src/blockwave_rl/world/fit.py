@@ -138,9 +138,16 @@ def main() -> None:
     reward = PixelEmpowerment(
         model, horizon=args.horizon, branch=args.branch, device=args.device, seed=args.seed,
     )
-    # Two futures are the same outcome when the model cannot resolve them apart.
-    width = float(np.sqrt(quality["mse"] * data.before.shape[1]))
-    reward.calibrate(empty_latent, width)
+    # Two futures are the same outcome when the model cannot resolve them apart,
+    # and the model's *mean* error is the wrong measure of that: a tail of badly
+    # predicted states inflates it, and at that width the count collapses 528
+    # predicted futures into fewer than two on a typical board. Ablated at 30M
+    # steps, one variable at a time: choosing the width by how much the reward
+    # varies across visited states reached 0.0635 lines per piece where the mean
+    # error's width reached ~0.053.
+    fitted = float(np.sqrt(quality["mse"] * data.before.shape[1]))
+    width = reward.choose_width(latents[:256], empty_latent, width=fitted)
+    print(f"  kernel width {fitted:.3f} fitted -> {width:.3f} chosen", flush=True)
 
     # The yardstick: the same reward, counted exactly with the simulator.
     exact_fn = HorizonEmpowermentReward(args.horizon)

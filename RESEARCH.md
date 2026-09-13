@@ -585,3 +585,47 @@ already public: re-calibration had been applied *in place* to `world.pt`, so the
 shipped reward briefly carried a width the shipped agent had never been trained
 with. Anyone evaluating it would have got intrinsic numbers on a different scale
 than the published ones. Restored from the values recorded in `world.json`.
+
+### Separating the two variables, one run each
+
+The failed trial changed the encoder and the kernel width together, so it could
+not say which hurt. Two runs at 30M steps, one variable each, same learner, same
+seed, same schedule — and the reference is the original pair.
+
+Held out, complete games, at the final checkpoint (29.5M steps):
+
+| variant | encoder | kernel width | lines/piece | pieces/game |
+|---|---|---|---|---|
+| **width only** | original 32-d | re-calibrated 0.486 | **0.0635 ± 0.0013** | **45.1** |
+| reference | original 32-d | fitted 1.945 | ~0.053 (interpolated) | ~43 |
+| encoder only | sharpened 64-d | fitted 2.532 | 0.0295 ± 0.0010 | 38.4 |
+| both (stopped at 31M) | sharpened 64-d | re-calibrated 0.633 | ~0.022 | ~36 |
+
+The training curves, at the last window before either run began annealing:
+
+| ≤20M steps | lines/piece |
+|---|---|
+| width only | 0.0366 |
+| reference | 0.0301 |
+| encoder only | 0.0224 |
+| both | 0.0178 |
+
+**It was the encoder, and the width was the good half.** Re-calibration helps:
+0.0635 at 29.5M against the reference's ~0.053, reaching in 30M steps what the
+original reward needed nearly 37M for. Sharpening the encoder hurts about as
+much: 0.0295, and between 9.8M and 19.7M it did not improve at all (0.0210 to
+0.0210) while the width-only run doubled (0.0204 to 0.0405).
+
+That inverts the conclusion the combined run suggested, which had been recorded
+here as "the sharpened reward taught less" without knowing which half was
+responsible. One run each was the way to find out, and worth the six hours.
+
+Why the sharper encoder should be worse is not settled. Its latents separate the
+outcomes of different programs better — that is what it was trained for — and the
+probes still pass. A plausible reading is that the inverse-model objective spends
+capacity on distinctions that predict *which key was pressed* rather than what
+the board became, and the reward only cares about the latter. That is a
+hypothesis, not a finding.
+
+`world.fit` now chooses the width by the spread criterion rather than the mean
+error, since that is the half that helps.
