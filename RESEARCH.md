@@ -550,3 +550,38 @@ The fix this implies is a sharper model or representation — more babbling data
 features trained to separate the outcomes of different programs (an inverse
 model, as curiosity work uses), a larger latent — and not more PPO steps. On the
 evidence here, beyond ~50M steps at this model quality the compute is wasted.
+
+### Sharpening it made it worse, and the trial confounded two changes
+
+Trained on the sharpened reward — the inverse-shaped encoder *and* the
+re-calibrated kernel width — against the original, same learner, same seed:
+
+| env steps | original reward | sharpened + re-calibrated |
+|---|---|---|
+| ≤5M | 0.0114 | 0.0095 |
+| ≤10M | 0.0177 | 0.0169 |
+| ≤15M | 0.0250 | 0.0179 |
+| ≤20M | 0.0301 | 0.0178 |
+| ≤25M | 0.0466 | 0.0201 |
+| ≤30M | 0.0546 | **0.0221** |
+
+Stopped at 31M: less than half the line rate, with no sign of closing. Reverted
+to the original reward, which is what `pretrained/` ships.
+
+So a reward can look better on every static measure — identifies its own
+programs more often, catches more fatal ones, probes higher, resolves 43 futures
+where the old one resolved 2 — and still teach less. Resolution is evidently not
+the whole story, and the plausible cost is variance: a finer measure also counts
+fine distinctions the model gets wrong, which is signal and noise together.
+
+**The trial changed two things at once**, encoder and width, so it cannot say
+which one hurt. That is a flaw in the experiment rather than in the result: the
+honest conclusion is only that this pair is worse than the original, not that
+sharpening or re-calibration is individually bad. Separating them is one run
+each, and worth doing before anyone builds on either.
+
+One artifact bug found while reverting, and worth recording because it was
+already public: re-calibration had been applied *in place* to `world.pt`, so the
+shipped reward briefly carried a width the shipped agent had never been trained
+with. Anyone evaluating it would have got intrinsic numbers on a different scale
+than the published ones. Restored from the values recorded in `world.json`.
