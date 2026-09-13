@@ -514,3 +514,39 @@ numbers as on the corpus it was fitted to. The reward held its accuracy where
 the agent went.
 
 Still one seed, and the board-state seeds spread about 10% at this length.
+
+### 150M steps from pixels: the reward, not the compute, is the ceiling
+
+Same configuration again, three times the length: 24,414 updates, 15 hours.
+
+| checkpoint | env steps | lines/piece | deaths/piece | pieces/game | games |
+|---|---|---|---|---|---|
+| 6000 | 36.9M | 0.0559 ± 0.0011 | 0.0233 | 43.0 | 801 |
+| 12000 | 73.7M | 0.0531 ± 0.0011 | 0.0242 | 41.2 | 763 |
+| 18000 | 110.6M | 0.0685 ± 0.0011 | 0.0228 | 43.9 | 671 |
+| 24000 | 147.5M | **0.0959 ± 0.0020** | **0.0194** | **51.6** | 601 |
+
+**Three times the compute bought 6%.** The 50M run reached 0.0901 and 50.6 in a
+fifth of the time. Compare the privileged track over the same stretch: it went
+from 0.0834 at 50M to 0.163 at 150M, nearly doubling. The gap between the two
+tracks was 7% at 50M and is 41% at 150M.
+
+**The flat stretch was the learning rate; the ceiling is not.** From 50M to
+120M the curve sat at 0.063-0.067 while entropy fell and the clip fraction rose
+— the policy kept moving without improving. Annealing recovered it, 0.0685 at
+110M to 0.0959 at 147M, a 40% gain from the schedule alone. So the plateau was
+not a hard limit, but what the anneal recovered only matched what a 50M run
+reaches five times sooner.
+
+**What that points at.** The reward counts futures its model can tell apart, and
+that model has 0.55 prediction skill and identifies which of 44 programs ran 19%
+of the time. Early on, telling a disastrous placement from a reasonable one is
+well within that resolution. Refining good play into better play is not: the
+distinctions get finer than the model can make, so the reward stops
+discriminating before the policy stops being improvable. The board-state track,
+counting exactly, has no such limit.
+
+The fix this implies is a sharper model or representation — more babbling data,
+features trained to separate the outcomes of different programs (an inverse
+model, as curiosity work uses), a larger latent — and not more PPO steps. On the
+evidence here, beyond ~50M steps at this model quality the compute is wasted.
