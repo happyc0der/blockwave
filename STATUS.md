@@ -77,7 +77,7 @@ Nothing can prevent lid-close sleep without an external display.
 * **Seed instability is the only follow-up with real expected value.** Seeds
   diverge by update ~3,600 and never reconverge, and every run gets most of its
   measurable gain after the LR anneal begins at 80%. A lower base LR or an
-  earlier anneal might cut the variance, and a *variance* drop (0.022 -> under
+  earlier anneal might cut the variance, and a *variance* drop (0.024 -> under
   0.010) is visible in 3 seeds where a mean shift is not. ~15 h.
 * Absolute headroom is real but belongs to a different reward: 0.08 lines/piece
   against a 0.40 theoretical maximum. Empowerment rewards keeping options open;

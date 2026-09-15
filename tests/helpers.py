@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import numpy as np
-import pytest
 
 from blockwave.core.board import Board
 from blockwave.core.constants import BOARD_WIDTH, TOTAL_HEIGHT, PieceType
@@ -27,8 +26,3 @@ def make_board(*rows: str) -> Board:
             else:
                 assert char == ".", f"unexpected character {char!r}"
     return board
-
-
-@pytest.fixture
-def empty_board() -> Board:
-    return Board()

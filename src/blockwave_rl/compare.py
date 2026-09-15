@@ -19,7 +19,11 @@ So the rule here is mechanical rather than advisory:
     cannot support a comparison;
   * a difference between groups is quoted only when both sides have >= 2 seeds,
     and it is always shown next to the smallest difference the seed count could
-    actually resolve.
+    actually resolve;
+  * ``--assume-sd`` is the one escape hatch: weigh a single-seed gap against a
+    seed SD measured *elsewhere*. It is printed as BORROWED and never as a
+    result, and it exists so that gross effects -- the agent learning at all --
+    can still be stated when the fine ones cannot.
 
 Nothing goes into README.md that did not come out of this tool.
 """

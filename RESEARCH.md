@@ -804,21 +804,21 @@ begins at 80%. Seeds diverge by update ~3,600 and never reconverge.
 To separate the 0.0047 re-calibration effect at 2σ:
 
 ```
-seeds per arm = 2 · (2σ/δ)²  with σ = 0.0223
-    δ = 0.0047  ->  169 seeds per arm
-    δ = 0.0100  ->   37
-    δ = 0.0200  ->    9
+seeds per arm = 2 · (2σ/δ)²  with σ = 0.0243
+    δ = 0.0047  ->  214 seeds per arm
+    δ = 0.0100  ->   47
+    δ = 0.0200  ->   12
 ```
 
-At 5 hours per 50M run, 169 seeds is over a month of continuous compute per arm.
-Three seeds per arm — the plan's requirement — resolves nothing below ~0.035,
-which is more than a third of the mean. **These questions are not open pending
+At 5 hours per 50M run, 214 seeds is six weeks of continuous compute per arm.
+Three seeds per arm — the plan's requirement — resolves nothing below ~0.040,
+which is nearly half the mean. **These questions are not open pending
 more compute; they are unanswerable at this noise level**, and saying so is the
 result.
 
 The one follow-up with real expected value is the variance itself. Seeds diverge
 early and every run depends on the anneal, which points at the learning-rate
-schedule. A drop from σ = 0.022 to under 0.010 would be visible in 3 seeds, where
+schedule. A drop from σ = 0.024 to under 0.010 would be visible in 3 seeds, where
 a mean shift of the size under discussion is not.
 
 ### What changed in the repository

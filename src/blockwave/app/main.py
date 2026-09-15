@@ -133,7 +133,6 @@ class Game:
 
         self.scene = Scene.TITLE
         self.running = True
-        self._start_level = start_level
 
         self.audio = SoundBank(enabled=audio)
         self.music_enabled = music and self.audio.enabled
@@ -216,15 +215,6 @@ class Game:
         # replay each had their own idea of how a tick is applied, a replay
         # could quietly diverge from the session it claims to reproduce.
         events = apply_tick(self.engine, actions, dt)
-        if events:
-            self._react(events)
-
-    def _apply(self, action: Action, dt: float) -> None:
-        """Drive a single action outside the fixed-timestep loop.
-
-        Used by tests and tools; the game loop itself goes through _tick.
-        """
-        events = self.engine.step(action, dt)
         if events:
             self._react(events)
 

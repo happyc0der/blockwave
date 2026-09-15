@@ -135,10 +135,6 @@ class SoundBank:
             except Exception:
                 self.missing.append(path.stem)
 
-    @property
-    def ready(self) -> bool:
-        return self.enabled and bool(self._sounds)
-
     # -- playback ---------------------------------------------------------
 
     def play(self, name: str) -> bool:

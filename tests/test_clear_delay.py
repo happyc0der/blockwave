@@ -222,11 +222,6 @@ def test_lock_progress_is_zero_for_a_falling_piece():
 # -- the move-reset budget ------------------------------------------------
 
 
-def exhaust_resets(engine: Engine) -> None:
-    for index in range(MAX_LOCK_RESETS + 3):
-        engine.step(Action.LEFT if index % 2 else Action.RIGHT, 0.001)
-
-
 def test_descending_to_a_new_row_refills_the_move_budget():
     """Guideline Extended Placement: a new lowest row restores the counter.
 

@@ -408,7 +408,7 @@ uv run python -m blockwave_rl.world.evaluate_pixel pretrained/pixel drift --rewa
 ```
 
 **If you train your own, train more than one seed.** Two runs of the same config
-here differed by 39%, so a single run tells you little about the configuration —
+here differed by 42%, so a single run tells you little about the configuration —
 only about that run. `scripts/launch` keeps a long run alive (it refuses to start
 on battery, where macOS sleeps even with sleep disabled on AC) and `scripts/after`
 chains the next step once a run really finished:
@@ -425,6 +425,8 @@ begins; timings are for an M4 Pro:
 # 1. can a linear readout of the encoder's latents recover the board?   (~10 min)
 uv run python -m blockwave_rl.repr.pixel_gate --out runs/pixel
 # 2. learn what the key presses do, by trying them                      (~15 min)
+#    (refuses to overwrite an existing runs/pixel/world.pt, since a trained
+#     agent may depend on it: re-fit into a new --out, or pass --force)
 uv run python -m blockwave_rl.world.fit --out runs/pixel
 # 3. does the reward rank competent play above every exploit?           (~5 min)
 uv run python -m blockwave_rl.world.rank --out runs/pixel
