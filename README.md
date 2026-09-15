@@ -404,10 +404,19 @@ uv run python -m blockwave_rl.world.watch_pixel pretrained/pixel/policy.pt --liv
 uv run python -m blockwave_rl.world.watch_pixel pretrained/pixel/policy.pt --live --speed 3   # three times faster
 ```
 
-Real time is deliberately slow: the agent decides five times a second, and one
-decision is one engine tick, so what you see is every state the game passes
-through at the rate the agent actually plays. It looks like stop-motion because
-it is.
+Real time is deliberately slow. The agent decides **5 times per second of game
+time**, and each decision advances the engine 0.2 s in a single step — 48× the
+game's own 240 Hz logic tick, which is what a human plays against. So the engine
+only ever occupies the states you are shown: there are no in-between frames
+being skipped. It looks like stop-motion because that is genuinely the
+resolution the agent plays at.
+
+At level 1 with `gravity_scale` 4, that is 0.8 rows of fall per decision, and
+**28 decisions per piece** measured on the shipped agent (the drift baseline
+takes 24 — see the rate table in [RESEARCH.md](RESEARCH.md) §3). Both sit in
+the 15–40 window the decision rate was chosen to hit: fewer and positioning
+becomes impossible, more and the credit-assignment chain stretches past what
+PPO learns from.
 
 | | |
 |---|---|

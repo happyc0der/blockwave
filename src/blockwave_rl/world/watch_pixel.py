@@ -138,9 +138,11 @@ def record(checkpoint: Path, out: Path, *, speed: float, profile: str, seed: int
 def play_live(checkpoint: Path, *, speed: float, profile: str, seed: int, max_decisions: int) -> int:
     """Play in the game's own window, paced to real time. Returns decisions made.
 
-    One decision is one engine tick, so presenting once per decision shows every
-    state the game passes through. At 5 Hz that is a deliberately slow picture:
-    it is the rate the agent actually plays at. ``speed`` scales it.
+    One decision advances the engine 0.2 s in a single step (48x the game's own
+    240 Hz logic tick), so the engine only occupies the states presented here --
+    presenting once per decision skips nothing. At 5 Hz that is a deliberately
+    slow picture: it is the resolution the agent actually plays at, about 28
+    decisions per piece. ``speed`` scales the wall-clock rate, not the agent's.
 
     Esc, Q or closing the window stops it. A top-out holds the last frame
     briefly, then the next game starts from the same held-out seed sequence.
