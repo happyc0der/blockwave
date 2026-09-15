@@ -397,19 +397,30 @@ uv sync --extra dev --extra rl
 ```
 
 **Watch the agent play, live, in the game's own window** — straight from the
-clone, no training required:
+clone, no training required, no ffmpeg:
 
 ```bash
-uv run python -m blockwave_rl.world.watch_pixel pretrained/pixel/policy.pt --live
+uv run python -m blockwave_rl.world.watch_pixel pretrained/pixel/policy.pt --live             # real time
+uv run python -m blockwave_rl.world.watch_pixel pretrained/pixel/policy.pt --live --speed 3   # three times faster
 ```
 
-It plays at real time, which is deliberately slow: the agent decides five times
-a second, and one decision is one engine tick, so what you see is every state
-the game passes through at the rate the agent actually plays. `--speed 3` runs
-it faster. Esc, Q or closing the window stops it; games come from the held-out
-evaluation seed in order, never picked for looking good. The window shows the
-score — that is for you. The agent's input is still the 88×88 crop with the HUD
-cut out, and the firewall test asserts that.
+Real time is deliberately slow: the agent decides five times a second, and one
+decision is one engine tick, so what you see is every state the game passes
+through at the rate the agent actually plays. It looks like stop-motion because
+it is.
+
+| | |
+|---|---|
+| **Stop** | `Esc` or `Q` with the window focused, or close it. It also stops itself at `--max-decisions` (default 20,000 — about an hour at real time). |
+| `--speed N` | Multiple of real time. Default 1 live, 2 for video. |
+| `--profile` | `flat`, `arcade` (default) or `arcade_max` — the picture *you* see. The agent always sees the `flat` crop, whatever you choose. |
+| `--seed` | Which sequence of games. Default is the held-out evaluation seed; games come in order, never picked for looking good. |
+| `--max-decisions` | Cap on decisions before it stops on its own. |
+| Terminal | One line per finished game: pieces placed, lines cleared, decisions so far. |
+
+The window shows the score — that is for you. The agent's input is still the
+88×88 crop with the HUD cut out, exactly as in training, and the firewall test
+asserts that.
 
 `pretrained/pixel` is the 50M-step pixel agent and the reward it learned with;
 `pretrained/board` is the 150M-step board-state agent. Without `--live`, both
@@ -470,9 +481,19 @@ records every approach tried, including the ones that failed and why.
 ## Tests
 
 ```bash
-uv run pytest       # 254 test functions, 432 cases after parametrisation (129 for the agent)
-uv run blockwave bench
+uv sync --extra dev --extra rl    # install: the game, the agent, and the dev tools
+uv run blockwave gen-assets       # build: synthesize every sound and music track (once)
+uv run pytest                     # 465 cases after parametrisation (162 for the agent), ~40 s
+uv run ruff check src tests       # lint gate; every ignored rule carries its reason in pyproject.toml
+scripts/install-hooks             # pre-commit: ruff, then pytest tests/rl, before every commit
+uv run blockwave bench            # engine steps/sec and per-profile fps against their floors
 ```
+
+`pytest tests/rl` is the agent's subset — the reward firewall, env semantics,
+the adversarial suite — and is what the pre-commit hook gates. There is no
+compile step: the package is pure Python, installed in place by `uv sync` (or
+`pip install -e .`), and `gen-assets` is the one thing that has to be built,
+because no audio file is checked in.
 
 The interesting ones are not the happy paths:
 
