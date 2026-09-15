@@ -5,7 +5,7 @@ much decoration it is allowed to spend — and, crucially, decoration is confine
 to layers that cannot occlude an occupied playfield cell.
 
 That invariant is what keeps the arcade loud and the information clean, and it
-is enforced by ``tests/test_legibility.py`` rather than by good intentions.
+is enforced by ``tests/test_profiles.py`` rather than by good intentions.
 """
 
 from __future__ import annotations

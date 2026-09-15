@@ -3,12 +3,12 @@
 Performance rots quietly: nothing fails when someone adds a per-cell loop to the
 renderer, the game just gets sluggish. These assert floors, not targets. The
 engine floor is an order of magnitude below what is measured. The render floor
-is not: it is a real 120 Hz budget, and one profile does not meet it (see
-`test_render_fast_enough`).
+is not: it is a real 120 Hz budget, and the heaviest profile clears it by about
+a quarter, not by an order of magnitude (see `test_render_fast_enough`).
 
 Measured on the development machine, idle, best of three (2026-09-15):
-engine 340k steps/sec (floor 50k); render flat 252 fps, arcade 134 fps,
-arcade_max 119.7 fps (floor 120).
+engine 340k steps/sec (floor 50k); render flat 282 fps, arcade 162 fps,
+arcade_max 148 fps (floor 120).
 """
 
 from __future__ import annotations
@@ -43,19 +43,25 @@ def test_render_fast_enough(profile):
     slower, never faster, so the maximum is the better estimate of what the
     renderer can do and the mean is biased by whatever else is running.
 
-    Measured best-of-three on the development machine, otherwise idle:
+    Measured best-of-three on the development machine, otherwise idle
+    (2026-09-15, after the vignette fix in `effects.py`):
 
-        flat        252.4 fps   2.10x the floor
-        arcade      134.5 fps   1.12x
-        arcade_max  119.7 fps   1.00x   <-- does not clear it
+        flat        281.9 fps   2.35x the floor
+        arcade      161.6 fps   1.35x
+        arcade_max  147.6 fps   1.23x
 
-    `arcade_max` does not meet this budget. It is not a regression and not
-    machine noise: the heaviest profile sits exactly on the line, so the test
-    passes or fails on a coin-flip. The docstring above this one claims the
-    floors sit "far below measured performance"; that is true of `flat` and
-    roughly true of `arcade`, and false here. Either `arcade_max` needs
-    optimising or it needs its own, honestly lower, floor -- and until that is
-    decided this test tells the truth by failing.
+    Before that fix `arcade_max` measured 119.7 against this 120 and passed or
+    failed on a coin-flip. The cause was not the profile's effects budget but a
+    numpy slow path: the vignette mask was stored (H, W, 1) and broadcast over
+    the colour axis, which cost 0.88 ms a frame against 0.16 ms for the same
+    mask stored (H, W, 3). That one change is worth about 0.7 ms of an 8 ms
+    frame. The fps figures above also carry machine-load variance -- `flat`,
+    which has no vignette, moved too between measurements -- so treat the
+    isolated 0.7 ms as the finding and the fps as its consequence on that day.
+
+    A 1.23x margin is real but not generous. If this fails again on an idle
+    machine, the next lever is `_blit_cells`, which upsamples the cell grid
+    twice per call (colours and mask) where once would do.
     """
     fps = max(render_frames_per_second(profile, HUMAN_CELL_PX, frames=60) for _ in range(3))
     assert fps >= RENDER_FLOOR_FPS, f"{profile} at {fps:,.0f} fps (best of 3)"

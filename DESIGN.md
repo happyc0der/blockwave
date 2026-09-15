@@ -145,6 +145,24 @@ visible change.
 
 ---
 
+### The vignette was five times slower than the scanlines
+
+Both are one multiply of the frame by a cached mask, yet `arcade_max` sat at
+119.7 fps against a 120 floor and the profiler put 0.88 ms of each frame in
+`vignette` alone — five times the identical operation in `scanlines`. The
+difference was the mask's shape. The scanline mask is `(H, 1, 1)`; the vignette
+mask was `(H, W, 1)`, and broadcasting a stride-0 axis of length 3 through
+numpy's inner loop is a slow path. Storing the same values as a contiguous
+`(H, W, 3)` array — 4 MB more, built once per compositor — brought the multiply
+to 0.16 ms. The output is byte-identical; the frame is 0.7 ms cheaper; the
+heaviest profile went from a coin-flip at the floor to 1.23× above it.
+
+Two things did *not* work, and are recorded so nobody tries them again: fusing
+the scanline and vignette masks into one multiply saves only 0.16 ms, because
+scanlines were never the expensive one; and rewriting bloom's upsample as a
+reshaped broadcast-add, though numerically exact, was *slower* than two
+`np.repeat` calls. Bloom's remaining 2 ms is the upsample itself.
+
 ## Things deliberately not done
 
 **No 180° rotation.** Not part of the guideline, and it would have needed a kick
