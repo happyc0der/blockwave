@@ -63,7 +63,8 @@ were failures of reproducibility and validity rather than of accuracy:
 |---|---|
 | `scripts/launch <run-dir> -m module ...` | start a long run; refuses to start on battery, holds caffeinate against idle sleep, writes a pidfile |
 | `scripts/after <run-dir> <final-ckpt> -- <cmd>` | run something after a run, only if the final checkpoint exists |
-| `scripts/install-hooks` | pre-commit hook running `pytest tests/rl` |
+| `scripts/install-hooks` | pre-commit hook: `ruff check src tests`, then `pytest tests/rl` |
+| `uv run ruff check src tests` | the correctness gate (`[tool.ruff]` in pyproject); every ignored rule carries its reason |
 | `python -m blockwave_rl.compare runs/...` | grouped results with honest uncertainty; `--markdown` emits the README table |
 
 macOS sleeps on **battery** even when disabled on AC (`pmset -g custom` shows

@@ -6,7 +6,6 @@ from dataclasses import dataclass
 
 from .board import Board
 from .constants import (
-    LAST_KICK_INDEX,
     SHAPES,
     SPAWN_X,
     SPAWN_Y,
@@ -49,7 +48,7 @@ class RotationResult:
     scores as a full T-spin rather than a mini.
     """
 
-    __slots__ = ("success", "kick_index")
+    __slots__ = ("kick_index", "success")
 
     def __init__(self, success: bool, kick_index: int = -1) -> None:
         self.success = success
@@ -125,7 +124,3 @@ def ghost_cells(piece: Piece, board: Board) -> tuple[tuple[int, int], ...]:
 def is_grounded(piece: Piece, board: Board) -> bool:
     """Whether the piece is resting on the stack or the floor."""
     return board.collides(piece.cells_at(piece.x, piece.y + 1, piece.rotation))
-
-
-def last_kick_used(result: RotationResult) -> bool:
-    return result.kick_index == LAST_KICK_INDEX

@@ -112,7 +112,7 @@ def _margin_over_noop(states, epochs: int) -> float:
     from blockwave_rl.repr.board_vae import train
 
     vae = train(states, latent_dim=16, epochs=epochs, seed=0)
-    embed = lambda board: vae.embed(board)[0]  # noqa: E731
+    embed = lambda board: vae.embed(board)[0]
     ref = run("heuristic", heuristic(), steps=STEPS, seed=0, embed=embed, clock="placement")
     noop = run("all_noop", EXPLOITS["all_noop"], steps=STEPS, seed=0, embed=embed, clock="placement")
     return ref.mean_reward - noop.mean_reward

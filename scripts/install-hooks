@@ -12,6 +12,13 @@ cat > "$hook" <<'HOOK'
 #!/bin/zsh
 # Reward-firewall and RL tests must pass before anything is committed.
 # Skip deliberately with:  git commit --no-verify
+print "pre-commit: uv run ruff check src tests"
+if ! uv run ruff check src tests; then
+  print -u2 ""
+  print -u2 "pre-commit: ruff found problems -- commit refused."
+  print -u2 "Most are autofixable: uv run ruff check --fix src tests"
+  exit 1
+fi
 print "pre-commit: uv run pytest tests/rl -q"
 if ! uv run pytest tests/rl -q; then
   print -u2 ""

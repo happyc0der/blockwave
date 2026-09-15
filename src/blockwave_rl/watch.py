@@ -20,8 +20,6 @@ import shutil
 import subprocess
 from pathlib import Path
 
-import numpy as np
-
 from blockwave.render.compositor import Compositor
 from blockwave.render.layout import HUMAN_CELL_PX, Layout
 
@@ -64,7 +62,8 @@ def record(checkpoint: Path, out: Path, *, speed: float, profile: str, seed: int
     encoder.stdin.write(frame.tobytes())
     decisions = 0
     try:
-        for decisions in range(1, max_decisions + 1):
+        for _ in range(max_decisions):
+            decisions += 1
             step = env.step(int(act(grid[None], queue[None])[0]))
             # A top-out soft-resets inside step(), so the board on screen would
             # already be a fresh one: stop on the last frame of the game.

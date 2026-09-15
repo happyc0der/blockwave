@@ -122,59 +122,6 @@ def chromatic(frame: np.ndarray, amount: float) -> np.ndarray:
     return out
 
 
-def grade(frame: np.ndarray, brightness: float = 1.0, contrast: float = 1.0) -> np.ndarray:
-    """Scale brightness and push contrast around mid grey."""
-    if brightness != 1.0:
-        frame = frame * brightness
-    if contrast != 1.0:
-        frame = (frame - 128.0) * contrast + 128.0
-    return frame
-
-
-def hue_rotate(frame: np.ndarray, degrees: float) -> np.ndarray:
-    """Rotate every hue by ``degrees`` with a single 3x3 colour matrix.
-
-    Cheaper than a round trip through HSV, and a small rotation keeps the whole
-    frame inside the Miami palette's neighbourhood rather than recolouring it
-    into something the game never actually looks like.
-    """
-    if abs(degrees) < 1e-3:
-        return frame
-    theta = np.radians(degrees)
-    cos, sin = np.cos(theta), np.sin(theta)
-    one_third = 1.0 / 3.0
-    sqrt_third = np.sqrt(one_third)
-
-    matrix = np.array(
-        [
-            [
-                cos + (1.0 - cos) * one_third,
-                one_third * (1.0 - cos) - sqrt_third * sin,
-                one_third * (1.0 - cos) + sqrt_third * sin,
-            ],
-            [
-                one_third * (1.0 - cos) + sqrt_third * sin,
-                cos + one_third * (1.0 - cos),
-                one_third * (1.0 - cos) - sqrt_third * sin,
-            ],
-            [
-                one_third * (1.0 - cos) - sqrt_third * sin,
-                one_third * (1.0 - cos) + sqrt_third * sin,
-                cos + one_third * (1.0 - cos),
-            ],
-        ],
-        dtype=np.float32,
-    )
-    return frame @ matrix.T
-
-
-def add_noise(frame: np.ndarray, amount: float, rng: np.random.Generator) -> np.ndarray:
-    """Sprinkle sensor noise over the frame."""
-    if amount <= 0.0:
-        return frame
-    return frame + rng.normal(0.0, amount, frame.shape).astype(np.float32)
-
-
 def shake_offset(frame: np.ndarray, dx: int, dy: int) -> np.ndarray:
     """Translate the whole frame.
 

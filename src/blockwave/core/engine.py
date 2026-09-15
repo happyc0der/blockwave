@@ -151,7 +151,7 @@ class Engine:
         if self.game_over or self.piece is None:
             return events
 
-        self._apply_gravity(dt, events)
+        self._apply_gravity(dt)
         if self.game_over or self.piece is None:
             return events
 
@@ -274,7 +274,7 @@ class Engine:
 
     # -- gravity and locking ----------------------------------------------
 
-    def _apply_gravity(self, dt: float, events: list[GameEvent]) -> None:
+    def _apply_gravity(self, dt: float) -> None:
         piece = self.piece
         assert piece is not None
 

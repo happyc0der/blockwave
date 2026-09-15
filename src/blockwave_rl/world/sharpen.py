@@ -162,13 +162,14 @@ def train_jointly(
     return encoder.eval().cpu(), forward.eval().cpu(), inverse.eval().cpu()
 
 
-def probe_gate(encoder, frames_before, frames_after, *, seed: int, n: int = 3000) -> dict[str, float]:
+def probe_gate(encoder, *, seed: int, n: int = 3000) -> dict[str, float]:
     """Re-run the representation gate: do the sharper latents still encode the board?
 
     Reconstruction is no longer the only job the encoder has, so this is not a
     formality — features shaped to separate programs could in principle drop what
     a reward about board quality needs. The boards come from a fresh rollout
-    rather than from the babble store, which keeps only pixels.
+    rather than from the babble store, which keeps only pixels — which is why
+    this takes no frames: it has to generate states whose true board it knows.
     """
     from ..env.base import BlockwaveEnv, EnvConfig, ObsMode
     from ..env.crops import Variant
@@ -274,7 +275,7 @@ def main() -> None:
     visited = encoder.embed(np.asarray(after[cut : cut + 400]))
     width = reward.choose_width(visited, empty_latent, width=width)
 
-    gate = probe_gate(encoder, before[cut:], after[cut:], seed=args.seed)
+    gate = probe_gate(encoder, seed=args.seed)
 
     torch.save(
         {"state_dict": encoder.state_dict(), "latent_dim": args.latent_dim, "size": int(before.shape[-1])},

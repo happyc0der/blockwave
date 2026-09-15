@@ -19,6 +19,7 @@ from pathlib import Path
 
 import numpy as np
 
+from ..env.base import N_ACTIONS
 from ..evaluate import BASELINES, EVAL_SEED, GameTracker, _ratio, baseline_actor
 from .pixel_vector import PixelVecEnv
 from .reward import FrameReward
@@ -64,7 +65,7 @@ def checkpoint_actor(path: Path, device: str, obs_shape):
 
     from ..agents.nets import PixelPolicy
 
-    policy = PixelPolicy(obs_shape, 8).to(device)
+    policy = PixelPolicy(obs_shape, N_ACTIONS).to(device)
     policy.load_state_dict(torch.load(path, map_location=device))
     policy.eval()
 
@@ -124,8 +125,10 @@ def main() -> None:
     for target in args.targets:
         if target in BASELINES:
             actor = baseline_actor(target, args.seed)
+            # Bound as a default so the closure captures this iteration's actor
+            # rather than whichever one the loop variable ends up pointing at.
             result = play(
-                lambda frames: actor(frames, None), reward_fn,
+                lambda frames, act=actor: act(frames, None), reward_fn,
                 steps_per_env=args.steps_per_env, envs=args.envs, workers=args.workers, seed=args.seed,
             )
             print(_row(f"{target} (pixel dynamics)", result), flush=True)

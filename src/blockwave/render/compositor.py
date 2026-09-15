@@ -139,7 +139,7 @@ class Compositor:
 
     def _background(self, frame: np.ndarray) -> None:
         """Vertical gradient, then the sun and grid floor if the profile wants them."""
-        height, width = frame.shape[:2]
+        height = frame.shape[0]
         top = np.array(VOID, dtype=np.float32)
         bottom = np.array(DEEP, dtype=np.float32)
         ramp = np.linspace(0.0, 1.0, height, dtype=np.float32)[:, None, None]

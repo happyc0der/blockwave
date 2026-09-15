@@ -27,6 +27,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
+    "ruff>=0.6",
 ]
 # The agent. Kept optional so installing the game never pulls in torch.
 rl = [
@@ -51,6 +52,41 @@ packages = ["src/blockwave", "src/blockwave_rl"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+# The rules that found real defects in the 2026-09-15 audit, kept as a gate.
+# F: undefined names and unused imports. B: closures over loop variables and
+# friends. ARG: parameters nothing reads -- how two dead signatures were found.
+# RUF: unused noqa and unpacked-but-unused variables. The style families are
+# deliberately left out; this is a correctness gate, not a formatter.
+select = ["F", "E9", "B", "ARG", "RUF", "SIM", "C4", "PIE", "RET", "UP"]
+ignore = [
+    "B905",   # zip(strict=) everywhere is noise on same-length iterables
+    "RUF046", # int(x) on an already-int expression is harmless and often clearer
+    "RUF007", # zip(a, a[1:]) is the idiom this codebase reads
+    "RUF005", # [a, *b] over a + b is taste, not correctness
+    "RUF001", # en dashes in user-facing strings are deliberate typography
+    "SIM108", # ternaries are not always clearer than if/else
+    "SIM105", # try/except/pass in a close() path is clearer than contextlib.suppress
+    "RET505", # else after return is a legitimate stylistic choice
+    "C408",   # dict(a=1) and {"a": 1} are both fine
+    "ARG005", # a lambda that satisfies a callback protocol must accept args it ignores
+    "UP042",  # (str, Enum) -> StrEnum changes str() output; not worth the migration risk
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Fixtures and scripted-policy callbacks take arguments by protocol, not by use.
+"tests/**" = ["ARG001", "ARG002"]
+"src/blockwave_rl/reward/rollout.py" = ["ARG001"]
+"src/blockwave_rl/repr/pixel_gate.py" = ["ARG001"]
+"src/blockwave/core/engine.py" = ["ARG002"]
+# Atomic write: a named temp file kept open past its block, then os.replace'd.
+"src/blockwave/app/scores.py" = ["SIM115"]
 
 [tool.uv]
 package = true

@@ -13,9 +13,9 @@ import pytest
 
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 
-from blockwave.core.constants import Action  # noqa: E402
-from blockwave_rl.env.base import N_ACTIONS, BlockwaveEnv, EnvConfig, ObsMode  # noqa: E402
-from blockwave_rl.env.crops import Variant  # noqa: E402
+from blockwave.core.constants import Action
+from blockwave_rl.env.base import N_ACTIONS, BlockwaveEnv, EnvConfig, ObsMode
+from blockwave_rl.env.crops import Variant
 
 
 def rollout(config: EnvConfig, seed: int, actions: list[int]) -> list[np.ndarray]:

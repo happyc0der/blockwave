@@ -18,6 +18,7 @@ import torch
 
 from .agents.nets import BoardPolicy
 from .agents.ppo import PPOConfig, RunningStd, gae, update
+from .env.base import N_ACTIONS
 from .env.vector import ProcessVecEnv
 from .evaluate import GameTracker
 
@@ -59,7 +60,7 @@ def train(args: argparse.Namespace) -> None:
         agent_hz=args.agent_hz, gravity_scale=args.gravity,
     )
     grid, queue = envs.reset()
-    policy = BoardPolicy(grid.shape[1:], queue.shape[1], 8).to(args.device)
+    policy = BoardPolicy(grid.shape[1:], queue.shape[1], N_ACTIONS).to(args.device)
     optimizer = torch.optim.Adam(policy.parameters(), lr=args.lr, eps=1e-5)
     config = PPOConfig(gamma=args.gamma, lam=args.lam, lam_step=args.lam_step, entropy=args.entropy, lr=args.lr)
     scale = RunningStd(args.envs, args.gamma)
@@ -106,7 +107,7 @@ def train(args: argparse.Namespace) -> None:
             args.gamma, args.lam, args.lam_step,
         )
 
-        flat = lambda x: torch.as_tensor(x.reshape(T * N, *x.shape[2:]), device=args.device)  # noqa: E731
+        flat = lambda x: torch.as_tensor(x.reshape(T * N, *x.shape[2:]), device=args.device)
         stats = update(
             policy, optimizer,
             {

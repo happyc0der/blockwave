@@ -1,11 +1,12 @@
 """What the agent is allowed to see.
 
 The crop is not a neutral choice. The game's HUD shows SCORE, LEVEL and LINES,
-and those change exactly when the agent does well — so to a surprise-minimizing
-agent, a changing score display is surprise to be avoided. Leave the HUD in frame
-and the reward actively discourages progress. Every variant here therefore
-excludes it, and `tests/rl/test_firewall.py` asserts that two states differing
-only in score produce byte-identical observations.
+and the whole claim of this package is that the agent never sees them: not as
+reward, and not as pixels a reward could be read back out of. (Under the
+surprise-minimizing objective first tried, a changing score display was also
+surprise to be *avoided*, which would have punished progress outright.) Every
+variant here therefore excludes it, and `tests/rl/test_firewall.py` asserts that
+two states differing only in score produce byte-identical observations.
 
 Two variants, because frame-stacking cannot recover what is not in the frame:
 

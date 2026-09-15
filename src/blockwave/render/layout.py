@@ -94,16 +94,6 @@ class Layout:
         )
 
     @property
-    def playfield(self) -> Rect:
-        """The 20 rows that actually count, excluding the spawn zone."""
-        return self._rect(
-            _MARGIN + _PANEL_W + _MARGIN,
-            _HEADER_H + SPAWN_ROWS_SHOWN,
-            BOARD_WIDTH,
-            TOTAL_HEIGHT - VISIBLE_TOP,
-        )
-
-    @property
     def hold_panel(self) -> Rect:
         return self._rect(_MARGIN, _HEADER_H, _PANEL_W, 4)
 
@@ -117,10 +107,6 @@ class Layout:
     @property
     def stats_panel(self) -> Rect:
         return self._rect(_MARGIN, _HEADER_H + 5, _PANEL_W, 9)
-
-    @property
-    def header(self) -> Rect:
-        return self._rect(0, 0, SCENE_COLS, _HEADER_H)
 
     @property
     def footer(self) -> Rect:

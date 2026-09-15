@@ -25,7 +25,7 @@ from .constants import BOARD_WIDTH, FULL_ROW, TOTAL_HEIGHT, VISIBLE_TOP, PieceTy
 
 
 class Board:
-    __slots__ = ("rows", "colors")
+    __slots__ = ("colors", "rows")
 
     def __init__(self) -> None:
         self.rows: list[int] = [0] * TOTAL_HEIGHT
@@ -101,9 +101,11 @@ class Board:
         )
 
     # -- stack metrics ----------------------------------------------------
-    # Reported through `telemetry()` for the HUD and for anything driving the
-    # engine. All measured over the visible playfield only, so the hidden
-    # buffer rows never distort them.
+    # Exposed through `Engine.telemetry()` for anything driving the engine
+    # from outside, and read directly by the scripted player and the
+    # representation probes in `blockwave_rl`. The HUD does not show them. All
+    # measured over the visible playfield only, so the hidden buffer rows never
+    # distort them.
 
     def column_heights(self) -> list[int]:
         """Height of each column, measured up from the floor."""

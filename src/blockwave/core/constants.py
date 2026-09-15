@@ -83,19 +83,8 @@ NUM_ACTIONS = len(Action)
 # which is the ordering the SRS kick tables are indexed by.
 #
 # Listing the states explicitly rather than rotating a matrix at runtime is both
-# faster and far harder to get subtly wrong.
-
-#: Bounding box edge length per piece. Only the I piece needs a 4x4 box; O uses
-#: a 3x3 box with its cells parked at bx 1-2 so that it spawns on columns 4-5.
-BOX_SIZE: dict[PieceType, int] = {
-    PieceType.I: 4,
-    PieceType.J: 3,
-    PieceType.L: 3,
-    PieceType.O: 3,
-    PieceType.S: 3,
-    PieceType.T: 3,
-    PieceType.Z: 3,
-}
+# faster and far harder to get subtly wrong. Offsets are inside a 3x3 box (4x4
+# for I); O parks its cells at bx 1-2 so that it spawns on columns 4-5.
 
 SHAPES: dict[PieceType, tuple[tuple[tuple[int, int], ...], ...]] = {
     # ....  ..X.  ....  .X..

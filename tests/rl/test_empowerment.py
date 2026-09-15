@@ -223,3 +223,42 @@ def test_bag_windows_match_the_real_randomizer():
     same = sum(v for (a, b), v in counts.items() if a == b) / (len(seq) - 1)
     assert same == pytest.approx(7 / 343, abs=0.003)
     assert set(counts) == set(bag_windows(2))
+
+
+# -- the placement enumerator against its own reference ---------------------
+
+
+def test_fast_placements_match_the_reference_enumerator():
+    """`_placements` is the hand-optimised version; `_placements_reference` is the
+    straightforward one its docstring says it is kept to be checked against.
+    Until this test existed, nothing checked it.
+
+    Random low stacks with the top rows clear, so every piece can spawn and most
+    placements survive; the two must agree on the exact set of resulting boards,
+    line clears included.
+    """
+    from blockwave.core.constants import BOARD_WIDTH, PieceType, TOTAL_HEIGHT
+
+    from blockwave_rl.reward.empowerment import _placements, _placements_reference
+
+    rng = np.random.default_rng(0)
+    full = (1 << BOARD_WIDTH) - 1
+    compared = 0
+    for _ in range(40):
+        depth = int(rng.integers(0, 12))
+        rows = [0] * (TOTAL_HEIGHT - depth)
+        for _ in range(depth):
+            row = int(rng.integers(0, full + 1))
+            if row == full:              # a pre-filled full row would clear on spawn
+                row &= ~(1 << int(rng.integers(BOARD_WIDTH)))
+            rows.append(row)
+        board = tuple(rows)
+        for piece in PieceType:
+            fast = set(_placements(board, piece))
+            slow = set(_placements_reference(board, piece))
+            assert fast == slow, (
+                f"{piece.name} on a {depth}-deep stack: fast enumerator disagrees with "
+                f"reference ({len(fast)} vs {len(slow)} boards)"
+            )
+            compared += len(fast)
+    assert compared > 1000, "the sample was too shallow to mean anything"

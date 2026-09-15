@@ -25,12 +25,12 @@ import pytest
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 
-from blockwave.core.constants import Action, PieceType  # noqa: E402
-from blockwave.core.engine import EngineConfig, Engine  # noqa: E402
-from blockwave.core.piece import Piece  # noqa: E402
-from blockwave.render.compositor import Compositor  # noqa: E402
-from blockwave.render.layout import Layout  # noqa: E402
-from blockwave.render.profiles import (  # noqa: E402
+from blockwave.core.constants import PieceType
+from blockwave.core.engine import EngineConfig, Engine
+from blockwave.core.piece import Piece
+from blockwave.render.compositor import Compositor
+from blockwave.render.layout import Layout
+from blockwave.render.profiles import (
     ARCADE,
     ARCADE_MAX,
     FLAT,

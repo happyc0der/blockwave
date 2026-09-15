@@ -92,9 +92,9 @@ class InputState:
 
     def key_up(self, key: int) -> None:
         binds = self.config.binds
-        if key in binds.left and self._direction == -1:
-            self._release_shift()
-        elif key in binds.right and self._direction == +1:
+        # Only the key for the direction currently held releases the shift;
+        # lifting the other one changes nothing.
+        if (key in binds.left and self._direction == -1) or (key in binds.right and self._direction == +1):
             self._release_shift()
 
     def _start_shift(self, direction: int) -> None:
@@ -170,6 +170,3 @@ class InputState:
         # Deliberately does nothing: the charge simply is not reset. The method
         # exists so the game loop can express the intent, and so the test suite
         # has something to assert against.
-
-    def is_held(self, keys, action: str) -> bool:
-        return any(keys[key] for key in getattr(self.config.binds, action))

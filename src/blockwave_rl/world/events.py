@@ -73,7 +73,6 @@ class FrameEvents:
 
     def __post_init__(self) -> None:
         self._next = _relative(self.layout.next_panel, self.crop)
-        self._hold = _relative(self.layout.hold_panel, self.crop)
         self._board = _relative(self.layout.board, self.crop)
         if self._next[0].stop <= self._next[0].start or self._next[1].stop <= self._next[1].start:
             raise ValueError("the next panel is not inside this crop: no placement signal")

@@ -20,9 +20,9 @@ import pytest
 
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 
-from blockwave.core.constants import Action  # noqa: E402
-from blockwave_rl.env.base import BlockwaveEnv, EnvConfig, ObsMode  # noqa: E402
-from blockwave_rl.env.crops import Variant  # noqa: E402
+from blockwave.core.constants import Action
+from blockwave_rl.env.base import BlockwaveEnv, EnvConfig, ObsMode
+from blockwave_rl.env.crops import Variant
 
 VARIANTS = list(Variant)
 CELL_SIZES = [3, 4, 6, 8]
@@ -88,7 +88,7 @@ def test_the_environment_emits_no_reward():
 
 def test_score_lives_only_in_info():
     env = BlockwaveEnv(EnvConfig(gravity_scale=8.0))
-    obs, info = env.reset(seed=3)
+    env.reset(seed=3)
     out = env.step(int(Action.HARD_DROP))
     assert isinstance(out[0], np.ndarray)
     assert out[1] == 0.0 and out[2] is False

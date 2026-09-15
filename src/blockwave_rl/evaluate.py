@@ -22,9 +22,11 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-from typing import Callable
+from collections.abc import Callable
 
 import numpy as np
+
+from .env.base import N_ACTIONS
 
 #: Baselines every result is compared against.
 #:
@@ -237,7 +239,7 @@ def checkpoint_actor(path: Path, device: str, horizon: int) -> Callable[[np.ndar
     from .agents.nets import BoardPolicy
     from .reward.empowerment_env import N_PIECES
 
-    policy = BoardPolicy((2, 24, 10), horizon * N_PIECES, 8).to(device)
+    policy = BoardPolicy((2, 24, 10), horizon * N_PIECES, N_ACTIONS).to(device)
     policy.load_state_dict(torch.load(path, map_location=device))
     policy.eval()
 

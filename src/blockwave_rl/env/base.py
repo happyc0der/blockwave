@@ -32,14 +32,16 @@ from enum import Enum
 import numpy as np
 
 from blockwave.app.replay import apply_tick
-from blockwave.core.constants import Action, BOARD_WIDTH, TOTAL_HEIGHT, VISIBLE_TOP
+from blockwave.core.constants import Action, BOARD_WIDTH, NUM_ACTIONS, TOTAL_HEIGHT, VISIBLE_TOP
 from blockwave.core.engine import Engine, EngineConfig
 from blockwave.render.compositor import Compositor
 from blockwave.render.layout import Layout
 
 from .crops import Crop, Variant, crop_for
 
-N_ACTIONS = len(Action)
+#: Re-exported so the learner and evaluators size their heads from the engine's
+#: own action set rather than a literal that has to agree with it by luck.
+N_ACTIONS = NUM_ACTIONS
 
 
 class ObsMode(str, Enum):

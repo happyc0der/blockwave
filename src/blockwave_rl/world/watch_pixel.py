@@ -25,7 +25,7 @@ import numpy as np
 from blockwave.render.compositor import Compositor
 from blockwave.render.layout import HUMAN_CELL_PX, Layout
 
-from ..env.base import BlockwaveEnv, EnvConfig, ObsMode
+from ..env.base import BlockwaveEnv, EnvConfig, N_ACTIONS, ObsMode
 from ..env.crops import Variant
 from ..evaluate import EVAL_SEED
 from .events import FrameEvents
@@ -53,7 +53,7 @@ def record(checkpoint: Path, out: Path, *, speed: float, profile: str, seed: int
     events = FrameEvents(env.layout, env.crop)
     events.calibrate(env._pixels())
 
-    policy = PixelPolicy((stack_size, 88, 88), 8)
+    policy = PixelPolicy((stack_size, 88, 88), N_ACTIONS)
     policy.load_state_dict(torch.load(checkpoint, map_location="cpu"))
     policy.eval()
     torch.manual_seed(seed)
@@ -77,7 +77,8 @@ def record(checkpoint: Path, out: Path, *, speed: float, profile: str, seed: int
     encoder.stdin.write(frame.tobytes())
     decisions = 0
     try:
-        for decisions in range(1, max_decisions + 1):
+        for _ in range(max_decisions):
+            decisions += 1
             with torch.no_grad():
                 observation = torch.as_tensor(np.stack(tuple(stack))[None])
                 action, _, _ = policy.act(observation)

@@ -1,12 +1,14 @@
 """Throughput floors for requirement 1.
 
 Performance rots quietly: nothing fails when someone adds a per-cell loop to the
-renderer, the game just gets sluggish. These assert order-of-magnitude floors,
-not targets — they are set far below measured performance so they catch a real
-regression rather than machine noise or a busy CI box.
+renderer, the game just gets sluggish. These assert floors, not targets. The
+engine floor is an order of magnitude below what is measured. The render floor
+is not: it is a real 120 Hz budget, and one profile does not meet it (see
+`test_render_fast_enough`).
 
-Measured on the development machine at the time of writing:
-engine 340k steps/sec (floor 50k), arcade render 145 fps (floor 120).
+Measured on the development machine, idle, best of three (2026-09-15):
+engine 340k steps/sec (floor 50k); render flat 252 fps, arcade 134 fps,
+arcade_max 119.7 fps (floor 120).
 """
 
 from __future__ import annotations

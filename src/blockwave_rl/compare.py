@@ -132,7 +132,8 @@ def describe(g: Group) -> list[str]:
     for run in g.runs:
         out.append(
             f"    seed {run.seed}  {run.checkpoint:16s} {run.lines_per_piece:.4f} lines/pc"
-            f"   {run.pieces_per_game:5.1f} pieces/game   (within-run SE {run.within_run_se:.4f})"
+            f"   {run.deaths_per_piece:.4f} deaths/pc   {run.pieces_per_game:5.1f} pieces/game"
+            f"   (within-run SE {run.within_run_se:.4f})"
         )
     if g.n < 2:
         out.append(

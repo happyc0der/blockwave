@@ -73,7 +73,6 @@ class HeuristicPlayer:
 
     def __init__(self) -> None:
         self._target: _Target | None = None
-        self._pieces_seen = 0
 
     def reset(self) -> None:
         self._target = None

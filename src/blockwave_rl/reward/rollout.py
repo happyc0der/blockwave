@@ -1,10 +1,11 @@
 """Score a fixed policy under the intrinsic reward, without training anything.
 
-This is how the reward is judged *before* compute is spent on it. A policy is
-run through the real environment and the SMiRL reward is computed exactly as it
-would be during training — θ fitted online, causally, on that policy's own
-experience. If a competent player does not out-score random play and every
-exploit here, the objective is wrong and no amount of training will fix it.
+This is how a reward is judged *before* compute is spent on it. A policy is run
+through the real environment and the intrinsic reward is computed exactly as it
+would be during training — for SMiRL, θ fitted online and causally on that
+policy's own experience (`run`); for empowerment, the exact future count
+(`run_empowerment`). If a competent player does not out-score random play and
+every exploit here, the objective is wrong and no amount of training will fix it.
 
 Reads only occupancy and the reward. Never reads score, lines or level.
 """
@@ -30,7 +31,6 @@ Policy = Callable[[Engine, np.random.Generator, int], int]
 class RolloutResult:
     name: str
     mean_reward: float
-    total_reward: float
     top_outs: int
     steps: int
 
@@ -63,11 +63,11 @@ def run(
     env.reset(seed=seed)
     if embed is None:
         reward = SmirlReward.for_board(env.observation_shape, smirl_config)
-        featurize = lambda board: board  # noqa: E731
+        featurize = lambda board: board
     else:
         dim = int(np.asarray(embed(env.occupancy())).reshape(-1).shape[0])
         reward = SmirlReward.for_latent(dim, smirl_config)
-        featurize = lambda board: np.asarray(embed(board)).reshape(-1)  # noqa: E731
+        featurize = lambda board: np.asarray(embed(board)).reshape(-1)
     rng = np.random.default_rng(seed)
 
     rewards: list[float] = []
@@ -83,7 +83,7 @@ def run(
             rewards.append(reward(featurize(env.occupancy())))
 
     scored = np.array(rewards[reward.config.warmup :]) if len(rewards) > reward.config.warmup else np.zeros(1)
-    return RolloutResult(name, float(scored.mean()), float(scored.sum()), top_outs, steps)
+    return RolloutResult(name, float(scored.mean()), top_outs, steps)
 
 
 # -- the reference and the exploits ---------------------------------------
@@ -169,4 +169,4 @@ def run_empowerment(
         )
         values.append(horizon_empowerment(list(engine.board.rows), queue[:horizon]))
     arr = np.array(values)
-    return RolloutResult(name, float(arr.mean()), float(arr.sum()), top_outs, t)
+    return RolloutResult(name, float(arr.mean()), top_outs, t)

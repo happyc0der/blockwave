@@ -17,7 +17,7 @@ from pathlib import Path
 import numpy as np, torch
 torch.set_num_threads(1)
 
-from blockwave_rl.env.base import BlockwaveEnv, EnvConfig, ObsMode
+from blockwave_rl.env.base import BlockwaveEnv, EnvConfig, N_ACTIONS, ObsMode
 from blockwave_rl.env.crops import Variant
 from blockwave_rl.agents.nets import PixelPolicy
 from blockwave_rl.world.babble import Babble
@@ -31,7 +31,7 @@ blob = torch.load("runs/pixel/vae.pt", map_location="cpu")
 vae = PixelVAE(blob["latent_dim"], blob["size"]); vae.load_state_dict(blob["state_dict"]); vae.eval()
 world = torch.load("runs/pixel/world.pt", map_location="cpu")
 model = MacroModel(world["latent_dim"]); model.load_state_dict(world["state_dict"]); model.eval()
-policy = PixelPolicy((4, 88, 88), 8); policy.load_state_dict(torch.load(ckpt, map_location="cpu")); policy.eval()
+policy = PixelPolicy((4, 88, 88), N_ACTIONS); policy.load_state_dict(torch.load(ckpt, map_location="cpu")); policy.eval()
 
 env = BlockwaveEnv(EnvConfig(obs_mode=ObsMode.PIXELS, variant=Variant.BOARD_PLUS_PREVIEW, cell_px=4,
                              agent_hz=5.0, gravity_scale=4.0, frame_stack=1))

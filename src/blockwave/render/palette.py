@@ -38,8 +38,6 @@ SPAWN_ZONE: RGB = _hex("1E0A33")    # the dimmed rows above the playfield
 MAGENTA: RGB = _hex("FF1E8E")
 CYAN: RGB = _hex("00F0FF")
 PURPLE: RGB = _hex("B026FF")
-ORANGE: RGB = _hex("FF6B35")
-DANGER: RGB = _hex("FF2E63")
 SUNSET_TOP: RGB = _hex("FFD319")
 SUNSET_BOTTOM: RGB = _hex("FF1E8E")
 
@@ -71,15 +69,3 @@ def piece_lut() -> np.ndarray:
     for piece, color in PIECE_COLORS.items():
         lut[int(piece)] = color
     return lut
-
-
-def brighten(color: RGB, amount: float) -> RGB:
-    """Mix ``color`` toward white — used for the lit edge of a block."""
-    return tuple(  # type: ignore[return-value]
-        int(round(channel + (255 - channel) * amount)) for channel in color
-    )
-
-
-def darken(color: RGB, amount: float) -> RGB:
-    """Mix ``color`` toward black — used for the shaded edge of a block."""
-    return tuple(int(round(channel * (1.0 - amount))) for channel in color)  # type: ignore[return-value]

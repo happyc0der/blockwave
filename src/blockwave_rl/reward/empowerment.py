@@ -98,7 +98,7 @@ class EmpowermentReward:
 # higher. Options only vanish at the instant a column is unreachable, which is
 # the instant of death. Danger is only visible at longer horizons.
 
-from blockwave.core.constants import FULL_ROW  # noqa: E402
+from blockwave.core.constants import FULL_ROW
 
 
 def _first_filled(rows: tuple[int, ...] | list[int]) -> list[list[int]]:

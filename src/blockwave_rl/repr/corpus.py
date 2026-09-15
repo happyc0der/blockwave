@@ -63,7 +63,7 @@ def collect(policy: Policy, n_states: int, *, seed: int, early_only: bool = Fals
 def build(sources: dict[str, tuple[Policy, int, bool]], *, seed: int = 0) -> tuple[np.ndarray, np.ndarray]:
     """Stack a mixture. Returns (states, source index per state)."""
     chunks, labels = [], []
-    for index, (name, (policy, n, early)) in enumerate(sources.items()):
+    for index, (_name, (policy, n, early)) in enumerate(sources.items()):
         chunk = collect(policy, n, seed=seed + index, early_only=early)
         chunks.append(chunk)
         labels.append(np.full(len(chunk), index))
@@ -142,7 +142,7 @@ def build_frames(
     """Stack a mixture of frame sources. Returns (frames, boards, is_lock, source)."""
     chunks: list[tuple[np.ndarray, np.ndarray, np.ndarray]] = []
     labels = []
-    for index, (name, (policy, n, early)) in enumerate(sources.items()):
+    for index, (_name, (policy, n, early)) in enumerate(sources.items()):
         chunk = collect_frames(policy, n, seed=seed + index, early_only=early, **kwargs)
         chunks.append(chunk)
         labels.append(np.full(len(chunk[0]), index))

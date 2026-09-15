@@ -18,10 +18,10 @@ import pytest
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 
-import pygame  # noqa: E402
+import pygame
 
-from blockwave.app.main import Game, Scene  # noqa: E402
-from blockwave.render.font import fit_scale, text_size  # noqa: E402
+from blockwave.app.main import Game, Scene
+from blockwave.render.font import text_size
 
 CELL_SIZES = [12, 20, 30, 40]
 

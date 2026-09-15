@@ -7,10 +7,10 @@ from collections import defaultdict
 
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 
-import pygame  # noqa: E402
+import pygame
 
-from blockwave.app.input import InputConfig, InputState  # noqa: E402
-from blockwave.core.constants import Action  # noqa: E402
+from blockwave.app.input import InputConfig, InputState
+from blockwave.core.constants import Action
 
 NO_KEYS = defaultdict(bool)
 

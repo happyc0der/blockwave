@@ -5,8 +5,12 @@ cells. That is the point: the per-cell Bernoulli scored empty cells
 independently, so a policy that left six columns permanently empty got that
 likelihood for free. A joint model has to account for the board as a whole.
 
-Same density family as the pixel track (Gaussian over VAE latents), which makes
-this a truer feasibility gate than the Bernoulli it replaces.
+This was the feasibility gate for the SMiRL objective (RESEARCH.md §1), and it
+is kept because `tests/rl/test_adversarial.py` uses it to pin how that objective
+fails: a Gaussian over these latents ranks competent play against the
+concentration exploits with a sign that flips with the corpus. The shipped pixel
+track does not use a density at all — it counts futures through a learned world
+model — so nothing here is on the reward path any more.
 """
 
 from __future__ import annotations

@@ -20,7 +20,7 @@ ALL_PIECES: tuple[PieceType, ...] = tuple(PieceType)
 class SevenBag:
     """Seeded 7-bag generator with a lookahead queue."""
 
-    __slots__ = ("_rng", "_bag", "_queue", "_preview")
+    __slots__ = ("_bag", "_preview", "_queue", "_rng")
 
     def __init__(self, seed: int | None = None, preview: int = 5) -> None:
         self._rng = random.Random(seed)
