@@ -1,0 +1,36 @@
+#!/bin/zsh
+# Run something once a training run finishes, but only if it really finished.
+#
+#   scripts/after runs/pixel_ppo_150m_width ckpt_24414.pt -- \
+#       uv run python -m blockwave_rl.world.evaluate_pixel runs/... --reward ...
+#
+# Waits on the pidfile `scripts/launch` wrote, then checks the expected final
+# checkpoint exists before running the command. The gate is the point: a run
+# that dies at hour 12 should not silently hand a truncated policy to an
+# evaluator, or start the next seed on a setup that is broken.
+set -e
+
+run_dir=$1
+expected=$2
+[[ $3 == "--" ]] || { print -u2 "usage: scripts/after <run-dir> <final-ckpt> -- <command...>"; exit 2 }
+shift 3
+
+pidfile="${run_dir%/}.pid"
+[[ -f $pidfile ]] || { print -u2 "no pidfile at $pidfile"; exit 2 }
+pid=$(<"$pidfile")
+
+print "waiting on pid $pid ($run_dir)"
+# POLL exists so the gate is testable without waiting out a full interval.
+while kill -0 "$pid" 2>/dev/null; do sleep "${POLL:-300}"; done
+print "exited at $(date)"
+
+if [[ ! -f "$run_dir/$expected" ]]; then
+  print -u2 "GATE FAILED: $run_dir/$expected missing -- the run did not complete."
+  # (N) so an empty directory yields nothing rather than a glob error.
+  local -a found=("$run_dir"/ckpt_*.pt(N))
+  print -u2 "last checkpoints: ${${found[-3,-1]}:-none}"
+  exit 1
+fi
+
+print "gate passed ($expected present); running: $*"
+"$@"

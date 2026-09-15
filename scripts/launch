@@ -1,0 +1,55 @@
+#!/bin/zsh
+# Start a long run so it survives the night.
+#
+#   scripts/launch runs/pixel_ppo_150m_width \
+#       -m blockwave_rl.world.train_pixel --out runs/pixel_ppo_150m_width ...
+#
+# The first argument is the run directory (used for the log and pidfile); the
+# rest is passed to `uv run python`. Three things this does that a bare nohup
+# does not:
+#
+#   * refuses to start on battery. A 150M run once lost 100 minutes to
+#     'Clamshell Sleep' because `sleep` is configured per power source: 0 on AC,
+#     1 on battery. The run did not crash, it simply stopped existing for a
+#     while, and the ETA was wrong by hours.
+#   * holds a caffeinate assertion tied to the run's PID, so idle sleep cannot
+#     take it and the assertion dies with the run rather than leaking.
+#   * writes a pidfile, so `scripts/after` can wait on it without anyone having
+#     to copy a PID out of the scrollback.
+#
+# It cannot prevent lid-close sleep: macOS only keeps running with the lid shut
+# on AC with an external display. Keep the lid open.
+set -e
+
+if [[ $# -lt 2 ]]; then
+  print -u2 "usage: scripts/launch <run-dir> <args to uv run python...>"
+  exit 2
+fi
+
+run_dir=$1; shift
+mkdir -p "$run_dir"
+log="${run_dir%/}.log"
+pidfile="${run_dir%/}.pid"
+
+if [[ -f $pidfile ]] && kill -0 "$(<"$pidfile")" 2>/dev/null; then
+  print -u2 "already running: $run_dir (pid $(<"$pidfile"))"
+  exit 1
+fi
+
+if ! pmset -g batt | grep -q "AC Power"; then
+  print -u2 "on battery -- refusing to start."
+  print -u2 "Sleep is disabled on AC only; on battery this run will be suspended."
+  print -u2 "Plug in, or set FORCE=1 to override."
+  [[ -n $FORCE ]] || exit 1
+  print -u2 "FORCE set, continuing anyway."
+fi
+
+nohup uv run python "$@" > "$log" 2>&1 &
+pid=$!
+print "$pid" > "$pidfile"
+nohup caffeinate -i -m -w "$pid" > /dev/null 2>&1 &
+
+print "started pid $pid"
+print "  log     $log"
+print "  pidfile $pidfile"
+print "  sleep   caffeinate held until pid $pid exits (idle sleep only; lid-close still sleeps)"

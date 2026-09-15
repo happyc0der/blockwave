@@ -35,9 +35,28 @@ def test_render_fast_enough(profile):
     clears 60 drops frames on a high-refresh display, which is how the default
     `arcade` profile was found to be spending 71% of its frame in a full
     resolution bloom blur.
+
+    Best of three, because this is a throughput measurement on a machine that
+    may be doing other things. Contention can only ever make a render look
+    slower, never faster, so the maximum is the better estimate of what the
+    renderer can do and the mean is biased by whatever else is running.
+
+    Measured best-of-three on the development machine, otherwise idle:
+
+        flat        252.4 fps   2.10x the floor
+        arcade      134.5 fps   1.12x
+        arcade_max  119.7 fps   1.00x   <-- does not clear it
+
+    `arcade_max` does not meet this budget. It is not a regression and not
+    machine noise: the heaviest profile sits exactly on the line, so the test
+    passes or fails on a coin-flip. The docstring above this one claims the
+    floors sit "far below measured performance"; that is true of `flat` and
+    roughly true of `arcade`, and false here. Either `arcade_max` needs
+    optimising or it needs its own, honestly lower, floor -- and until that is
+    decided this test tells the truth by failing.
     """
-    fps = render_frames_per_second(profile, HUMAN_CELL_PX, frames=60)
-    assert fps >= RENDER_FLOOR_FPS, f"{profile} at {fps:,.0f} fps"
+    fps = max(render_frames_per_second(profile, HUMAN_CELL_PX, frames=60) for _ in range(3))
+    assert fps >= RENDER_FLOOR_FPS, f"{profile} at {fps:,.0f} fps (best of 3)"
 
 
 def test_logic_tick_budget_is_comfortable():

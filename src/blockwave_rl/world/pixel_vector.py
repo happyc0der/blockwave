@@ -33,6 +33,12 @@ class PixelBatch:
 
 
 def _worker(conn, count: int, seed: int, config: dict) -> None:
+    """Run ``count`` envs whose global indices start at the caller's offset.
+
+    ``seed`` is already offset to this worker's first global env index, so an
+    env's seed depends on where it sits in the whole vector and not on how the
+    vector happens to be split. See `PixelVecEnv.__init__`.
+    """
     from ..env.base import BlockwaveEnv, EnvConfig, ObsMode
     from ..env.crops import Variant
     from .events import FrameEvents
@@ -101,8 +107,11 @@ class PixelVecEnv:
         self._conns, self._procs = [], []
         for w in range(n_workers):
             parent, child = ctx.Pipe()
+            # Seed by global env index, not by worker index. Seeding per worker
+            # made the sample of games a function of `--workers`, so changing
+            # the parallelism silently changed the measurement.
             proc = ctx.Process(
-                target=_worker, args=(child, self._per, seed + w * 10_000, config), daemon=True,
+                target=_worker, args=(child, self._per, seed + w * self._per, config), daemon=True,
             )
             proc.start()
             child.close()

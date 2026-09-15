@@ -282,6 +282,10 @@ def main() -> None:
     if device == "auto":
         device = "mps" if torch.backends.mps.is_available() else "cpu"
     torch.set_num_threads(1)
+    # The policy samples its actions, so an unseeded evaluation plays different
+    # games every time and its number cannot be reproduced. See the same fix in
+    # `world/evaluate_pixel.py`.
+    torch.manual_seed(args.seed)
     common = dict(
         steps_per_env=args.steps_per_env, burn_in=args.burn_in,
         envs=args.envs, workers=args.workers, seed=args.seed, death=args.death, gamma=args.gamma,

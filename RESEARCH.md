@@ -20,6 +20,15 @@ failures included.
   to choose.
 - **The board-state track reads true occupancy.** It is a feasibility check of
   the reward, not the pixel-only deliverable, and is labelled as such.
+- **A single seed cannot support a comparison**, and the standard error
+  `evaluate.py` prints is not an error bar on one. It is the spread across games
+  played by *one trained network*; the spread across training runs is far
+  larger. Comparisons are quoted only at n >= 2 per arm, through
+  `python -m blockwave_rl.compare`, which refuses to print a sigma at n=1.
+  **This rule was added late, after §7 showed that several results below had
+  broken it.** Sections 3-6 are left as they were written, with the claims §7
+  withdraws marked in place, because how a wrong conclusion survived matters as
+  much as the correction.
 
 ## 1. SMiRL: failed on a full-width board
 
@@ -517,6 +526,11 @@ Still one seed, and the board-state seeds spread about 10% at this length.
 
 ### 150M steps from pixels: the reward, not the compute, is the ceiling
 
+> **Withdrawn by §7.** Both the section title and the "three times the compute
+> bought 6%" conclusion rest on comparing two single runs. The seed spread
+> measured in §7 is roughly five times that 6%, so this comparison cannot
+> distinguish a compute effect from two draws of the same configuration.
+
 Same configuration again, three times the length: 24,414 updates, 15 hours.
 
 | checkpoint | env steps | lines/piece | deaths/piece | pieces/game | games |
@@ -588,6 +602,12 @@ than the published ones. Restored from the values recorded in `world.json`.
 
 ### Separating the two variables, one run each
 
+> **Withdrawn by §7.** Isolating the two variables was the right design, but
+> "one run each" is exactly the flaw §7 exposes: with one seed per arm there is
+> no uncertainty to compare the arms against. The conclusion that the encoder
+> hurt and the width helped is not supported by this evidence. The experiment
+> would need ~169 seeds per arm to resolve an effect of the size claimed.
+
 The failed trial changed the encoder and the kernel width together, so it could
 not say which hurt. Two runs at 30M steps, one variable each, same learner, same
 seed, same schedule — and the reference is the original pair.
@@ -632,6 +652,11 @@ error, since that is the half that helps.
 
 ### The flagship, re-trained with the better-calibrated reward
 
+> **Withdrawn by §7.** The +5% reported here, and the claim that this reaches at
+> 50M what the original needed 150M for, are single-seed comparisons. §7 measures
+> the seed spread at roughly six times that +5%. The re-trained agent is a
+> perfectly good agent; the reason given for preferring it does not hold.
+
 Same configuration as the 50M flagship, changing only the kernel width — the
 half the ablation showed helps. Held out, complete games:
 
@@ -660,3 +685,156 @@ all rather than the best.
 
 `pretrained/` now ships this agent with the reward it was trained against, so
 the two stay matched.
+
+## 7. A second seed, and the retraction of §§5–6
+
+Every pixel comparison above ran one seed per configuration. The plan called for
+three. The shortcut seemed defensible because `evaluate.py` prints a standard
+error of about ±0.0016 on 600-odd complete games, and the effects being reported
+were two to three times that. A second seed of the 150M re-calibrated flagship —
+same config, same reward, same schedule, `--seed 1` instead of `--seed 0` — was
+run to firm up the number.
+
+| seed | lines/piece | deaths/piece | pieces/game | games |
+|---|---|---|---|---|
+| 0 | 0.0991 ± 0.0017 | 0.0191 | 52.5 | 600 |
+| 1 | **0.0647 ± 0.0014** | 0.0217 | 46.1 | 660 |
+
+The two differ by 0.0344, **42% of their mean**. The seed-to-seed SD is 0.0243,
+about **19× the within-run standard error** that every earlier comparison had
+been quoted against.
+
+(These are the final, fully-corrected measurements. The seed gap was first seen
+at 0.0965 / 0.0650 before the two evaluator defects below were fixed; correcting
+them moved both numbers slightly and the gap not at all.)
+
+### Why the error bar was the wrong one
+
+`evaluate.py`'s standard error is computed across *envs within one evaluation*.
+It answers "how precisely did we measure this network?" — and the answer, ±0.0016,
+is correct. The question every comparison actually asked was "would training this
+configuration again land somewhere else?", and nothing in that number addresses
+it. Two sources of variance were being conflated, and the smaller one was
+standing in for the larger.
+
+Against the measured 0.0243, the effects previously reported — and what they
+became once the evaluator was fixed and every run re-measured at its true final
+checkpoint:
+
+| claim | as reported | re-measured | fraction of seed SD |
+|---|---|---|---|
+| re-calibrated reward beats original at 50M | +0.0047 | **+0.0016** | 0.07 |
+| 150M re-calibrated beats 150M original | +0.0020 | **+0.0001** | 0.00 |
+| 150M beats 50M, re-calibrated | +0.0031 | −0.0122 | (sign reversed) |
+
+None is distinguishable from drawing the same configuration twice. The second
+row is the cleanest statement of the whole episode: on matched seeds the two
+rewards score **0.0990** and **0.0991**. A 5% advantage was reported for one of
+them.
+
+### Two smaller problems found on the way
+
+Fixing this exposed a measurement bug. `PixelVecEnv` seeded each worker from its
+own index, so `--workers` decided *which games were played*: changing the
+parallelism silently changed the number. Seeding now follows the global env index
+(`tests/rl/test_pixel_vector.py` asserts the two layouts agree byte-for-byte).
+
+Re-measuring every final checkpoint under the corrected seeding — and at the true
+final checkpoint rather than whichever one an `--every 8` schedule happened to
+land on — moved the numbers by 0.003–0.004 each. That is the same size as all
+three effects in the table above. The 50M re-calibration gap, reported as
+"+0.0047, 2.28σ", became **+0.0013** under nothing more than corrected
+bookkeeping, before seed variance was considered at all.
+
+Old curves are kept as `runs/*/eval_pre_seedfix.jsonl`; they are internally
+consistent but do not reproduce against current code.
+
+**The evaluator was also not reproducible at all.** The policy samples its
+actions rather than taking the argmax, and neither evaluator called
+`torch.manual_seed`, so every evaluation played a different sequence of games.
+Evaluating one byte-identical checkpoint twice gave 0.0953 and 0.0949 — a wobble
+of about a quarter of the within-run SE, small enough to have gone unnoticed
+indefinitely, and fatal to "check the numbers for yourself". Both evaluators now
+seed from `--seed`, and re-running the same command twice reproduces exactly.
+
+Having both an unseeded and a seeded measurement of five checkpoints gives two
+independent draws of each, which pins down how noisy an evaluation actually is:
+
+| run | draw A | draw B | implied SD | reported SE |
+|---|---|---|---|---|
+| 10M | 0.0212 | 0.0238 | 0.0018 | 0.0008 |
+| 30M encoder-only | 0.0301 | 0.0310 | 0.0006 | 0.0010 |
+| 30M width-only | 0.0633 | 0.0609 | 0.0017 | 0.0012 |
+| 50M original | 0.0940 | 0.0925 | 0.0011 | 0.0016 |
+| 50M re-calibrated | 0.0953 | 0.0941 | 0.0008 | 0.0019 |
+| | | **mean** | **0.0012** | **0.0013** |
+
+**The within-run standard error was accurate.** It estimates evaluation noise to
+within 6%, and that was never the problem. The problem is that it answers "how
+precisely was this network measured?" when every comparison in §§5–6 was asking
+"would training this configuration again land somewhere else?" — a quantity 17×
+larger that nothing in the pipeline measured at all.
+
+That also right-sizes the two smaller defects. Unseeded sampling was a
+*reproducibility* failure, not an accuracy one: the noise it introduced was
+already inside the quoted error bar, but a published number could not be checked.
+The worker-index seeding was a *validity* failure: it made the measurement depend
+on a flag that should not have touched it. Neither one moved any conclusion. The
+seed count did.
+
+### What this costs, and what it does not
+
+Withdrawn: every comparison between reward variants and between compute budgets
+in §§5–6, marked in place above. The sharpening ablation's conclusion goes with
+them — the design was right, the seed count was not.
+
+Not withdrawn: the deliverable. Both seeds clear the drift baseline (0.0018) by
+36× and 54×, and clear a random policy by more still. An agent seeing only an
+88×88 crop, pressing one key per decision, learning what those keys do by trying
+them and deriving its own reward, plays Tetris far better than any trivial
+policy. That gap is two orders of magnitude larger than the seed spread and was
+never in question.
+
+Also not withdrawn: the curve *shape*, which both seeds share. A long flat
+plateau, then most of the measurable gain arriving after the learning-rate anneal
+begins at 80%. Seeds diverge by update ~3,600 and never reconverge.
+
+### Why this is not being resolved with more runs
+
+To separate the 0.0047 re-calibration effect at 2σ:
+
+```
+seeds per arm = 2 · (2σ/δ)²  with σ = 0.0223
+    δ = 0.0047  ->  169 seeds per arm
+    δ = 0.0100  ->   37
+    δ = 0.0200  ->    9
+```
+
+At 5 hours per 50M run, 169 seeds is over a month of continuous compute per arm.
+Three seeds per arm — the plan's requirement — resolves nothing below ~0.035,
+which is more than a third of the mean. **These questions are not open pending
+more compute; they are unanswerable at this noise level**, and saying so is the
+result.
+
+The one follow-up with real expected value is the variance itself. Seeds diverge
+early and every run depends on the anneal, which points at the learning-rate
+schedule. A drop from σ = 0.022 to under 0.010 would be visible in 3 seeds, where
+a mean shift of the size under discussion is not.
+
+### What changed in the repository
+
+- `python -m blockwave_rl.compare` groups runs by config, refuses to print a
+  sigma at n=1, and emits the README table. Nothing enters README.md otherwise.
+- A rule at the top of this file: single seeds do not support comparisons.
+- `scripts/launch` refuses to start a run on battery, after a 150M run lost 100
+  minutes to clamshell sleep (macOS `sleep` is 0 on AC but 1 on battery).
+- `world/fit.py` refuses to overwrite an existing `world.pt`; doing so in place
+  once shipped an agent with a reward it had never trained against.
+- Both evaluators seed `torch`, so a published number reproduces exactly.
+- `PixelVecEnv` seeds by global env index, asserted byte-for-byte across worker
+  layouts in `tests/rl/test_pixel_vector.py`.
+- `tests/test_perf.py` takes the best of three render timings: contention only
+  ever makes a renderer look slower, so the mean was biased by whatever else was
+  running and `arcade_max` failed at 117 against its 120 floor during training.
+- A pre-commit hook runs `tests/rl` (`scripts/install-hooks`), after a commit
+  once landed with a failing test because the check was chained off a `tail`.

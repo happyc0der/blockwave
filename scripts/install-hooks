@@ -1,0 +1,26 @@
+#!/bin/zsh
+# Install the pre-commit hook. Run once per clone:  scripts/install-hooks
+#
+# A commit once landed with a failing test because the check was chained off a
+# `tail` with `&&`, so the pipeline's exit status was the tail's and the failure
+# was invisible. The hook removes the chance to get that wrong by hand.
+set -e
+root=$(git rev-parse --show-toplevel)
+hook="$root/.git/hooks/pre-commit"
+
+cat > "$hook" <<'HOOK'
+#!/bin/zsh
+# Reward-firewall and RL tests must pass before anything is committed.
+# Skip deliberately with:  git commit --no-verify
+print "pre-commit: uv run pytest tests/rl -q"
+if ! uv run pytest tests/rl -q; then
+  print -u2 ""
+  print -u2 "pre-commit: tests/rl failed -- commit refused."
+  print -u2 "These gate the reward firewall and env semantics; a failure here means"
+  print -u2 "the agent's guarantees are not holding. Fix, or --no-verify deliberately."
+  exit 1
+fi
+HOOK
+
+chmod +x "$hook"
+print "installed $hook"

@@ -321,36 +321,68 @@ games, at checkpoints fixed in advance — never picked for looking good. Lines
 per piece is the yardstick because it is scale-free: a piece is four cells and a
 line is ten, so 0.4 is the ceiling for perfect play with no wasted cells.
 
-| policy | lines per piece | pieces per game | what it is |
+**How much of this is noise?** Two runs of the identical 150M configuration,
+differing only in random seed, scored **0.0647** and **0.0991** — a spread of
+42% of their mean. So the honest error bar on any single pixel run is about
+**±0.024**, roughly 19× the ±0.0013 standard error printed next to an individual
+evaluation. That printed error is real, but it measures how precisely *one
+trained network* was tested; it is not an error bar on a comparison between
+configurations. The small gaps between rows below are not results.
+
+| policy | lines per piece | pieces per game | seeds |
 |---|---|---|---|
 | random keys | 0.0000 | 12.2 | the floor |
 | never hard-drops ("drift") | 0.0018 | 19.7 | the strongest trivial policy, and the real bar |
-| board-state agent, 10M steps | 0.0206 | 35.5 | 3 seeds |
-| board-state agent, 50M steps | 0.0834 | 49.9 | 3 seeds |
-| board-state agent, 150M steps | 0.1629 | 69.6 | 1 seed |
-| **pixel agent, 10M steps** | 0.0239 | 35.7 | from the screen alone |
-| **pixel agent, 50M steps** | 0.0901 | 50.6 | |
-| **pixel agent, 150M steps** | 0.0959 | 51.6 | 3× the compute bought 6% |
-| **pixel agent, 50M, re-calibrated reward** | **0.0948** | **51.3** | what 150M bought before, at a third of the cost — this is the one in `pretrained/` |
+| board-state agent, 10M steps | 0.0206 | 35.5 | 3 |
+| board-state agent, 50M steps | 0.0834 | 49.9 | 3 |
+| board-state agent, 150M steps | 0.1629 | 69.6 | 1 |
+| **pixel agent, 10M steps** | 0.0238 | 35.7 | 1 |
+| **pixel agent, 50M steps** | 0.0925 | 50.9 | 1 |
+| **pixel agent, 50M, re-calibrated reward** | 0.0941 | 50.6 | 1 — the one in `pretrained/` |
+| **pixel agent, 150M steps** | 0.0990 | 52.2 | 1 |
+| **pixel agent, 150M, re-calibrated reward** | 0.0819 | 49.3 | **2** (0.0647 – 0.0991) |
 | scripted heuristic | 0.393 | never tops out | a reference player, not learned |
 
+The clearest illustration of why the seed count matters: on matched seeds, the
+original reward and the re-calibrated one score **0.0990** and **0.0991** at 150M.
+An earlier version of this README reported the re-calibration as a 5% win.
+
 Read it this way. The drift baseline is what you get for free by never pressing
-hard drop, and beating *random* means nothing next to it. The pixel agent reaches
-about a quarter of the scripted player's line rate and survives around fifty
-pieces a game, having been told nothing about Tetris: it worked out what its keys
-do by pressing them, and what "doing well" means from what it could see.
+hard drop, and beating *random* means nothing next to it. The pixel agent clears
+that bar by 36× on its worst seed and 55× on its best, reaches about a quarter of
+the scripted player's line rate, and survives around fifty pieces a game — having
+been told nothing about Tetris. It worked out what its keys do by pressing them,
+and what "doing well" means from what it could see. That is the result, and it is
+far clear of the seed spread.
 
-The last row is the same agent trained against a better-calibrated version of
-its own reward, which reaches in 50M steps what the original needed 150M for.
-What changed was not the model but how finely the reward counts: see
-[RESEARCH.md](RESEARCH.md).
+**What the table does not show is which configuration is best.** The differences
+between the pixel rows — reward variants, 50M against 150M — are all smaller
+than ±0.024, and an earlier version of this README reported several of them as
+findings. They were not. Separating an effect that size from seed noise would
+take hundreds of runs per configuration, so the question is closed as
+unanswerable at this cost rather than open. [RESEARCH.md §7](RESEARCH.md)
+has the measurement and the retractions.
 
-The two tracks are within a few percent of each other at 50M steps, which is the
-result worth noting — seeing only the screen costs surprisingly little against
-reading the true board. They diverge afterwards, and
-[RESEARCH.md](RESEARCH.md) explains why: the pixel reward can only count futures
-its learned model can tell apart, and that resolution, not compute, is its
-ceiling.
+The two tracks land within a few percent of each other at 50M steps. Seeing only
+the screen appears to cost little against reading the true board — though "a few
+percent" is itself well inside the noise, so treat it as *not obviously worse*
+rather than as a measured equivalence. At 150M the board-state track is ahead of
+the two-seed pixel mean by 0.081, about 2.4σ against the pixel seed spread. That
+is the only gap between tracks in the table that clears the bar at all, and it
+still rests on a single board-state seed, so treat it as the one difference here
+worth taking seriously rather than as settled.
+
+Every pixel number above is regenerated by `python -m blockwave_rl.compare`,
+which groups runs by configuration and refuses to print a significance figure
+for a single-seed one. It also lists the two 30M ablation runs, which are
+discussed in [RESEARCH.md](RESEARCH.md) rather than here:
+
+```bash
+uv run python -m blockwave_rl.compare --markdown runs/pixel_ppo_*
+```
+
+Drop `--markdown` to see the seed spread, what each seed count can resolve, and
+the contrasts it declines to make.
 
 ### Follow along
 
@@ -373,6 +405,17 @@ seeds and prints lines per piece, deaths per piece and pieces per game:
 
 ```bash
 uv run python -m blockwave_rl.world.evaluate_pixel pretrained/pixel drift --reward pretrained/pixel
+```
+
+**If you train your own, train more than one seed.** Two runs of the same config
+here differed by 39%, so a single run tells you little about the configuration —
+only about that run. `scripts/launch` keeps a long run alive (it refuses to start
+on battery, where macOS sleeps even with sleep disabled on AC) and `scripts/after`
+chains the next step once a run really finished:
+
+```bash
+scripts/install-hooks   # pre-commit: tests/rl must pass
+scripts/launch runs/mine -m blockwave_rl.world.train_pixel --out runs/mine --reward runs/pixel --steps 50000000 --seed 0
 ```
 
 Train one yourself. The pixel track is four stages, each gated before the next

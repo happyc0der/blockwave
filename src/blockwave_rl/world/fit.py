@@ -84,6 +84,11 @@ def spearman(a: np.ndarray, b: np.ndarray) -> float:
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     p.add_argument("--out", type=Path, default=Path("runs/pixel"))
+    p.add_argument("--vae", type=Path, default=None,
+                   help="where to read vae.pt from (default: --out), so a re-fit can reuse "
+                        "an encoder without writing back into its directory")
+    p.add_argument("--force", action="store_true",
+                   help="overwrite an existing world.pt in --out")
     p.add_argument("--pieces", type=int, default=60_000, help="macros to try while babbling")
     p.add_argument("--epochs", type=int, default=20)
     p.add_argument("--horizon", type=int, default=2)
@@ -98,7 +103,21 @@ def main() -> None:
 
     from ..repr.pixel_vae import PixelVAE
 
-    blob = torch.load(args.out / "vae.pt", map_location="cpu")
+    # A re-fit once wrote a new kernel width straight back over `runs/pixel/world.pt`,
+    # which was the reward a shipped agent had been trained against. The agent in
+    # `pretrained/` then carried a reward it had never seen. Refuse by default.
+    existing = args.out / "world.pt"
+    if existing.exists() and not args.force:
+        raise SystemExit(
+            f"{existing} already exists. A trained agent may depend on it: overwriting it in "
+            f"place makes that agent's reward unreproducible.\n"
+            f"Write to a new --out (and point --vae at the old one to reuse its encoder), "
+            f"or pass --force if you really mean to replace it."
+        )
+
+    vae_dir = args.vae or args.out
+    args.out.mkdir(parents=True, exist_ok=True)
+    blob = torch.load(vae_dir / "vae.pt", map_location="cpu")
     vae = PixelVAE(blob["latent_dim"], blob["size"])
     vae.load_state_dict(blob["state_dict"])
     vae.eval()

@@ -77,6 +77,14 @@ def checkpoint_actor(path: Path, device: str, obs_shape):
 
 
 def _row(name: str, r: dict[str, float]) -> str:
+    # Complete games are measured between an env's first and last top-out, so a
+    # window too short for two deaths yields nothing to measure. A good agent
+    # needs a longer one than a bad agent: say so rather than printing nan.
+    if not r["games"]:
+        return (
+            f"{name:>26s}  no complete games in this window -- raise --steps-per-env "
+            f"(default 20000; {r['steps']:,} env-steps total here)"
+        )
     return (
         f"{name:>26s}  lines/pc {r['lines_per_piece']:.4f} ±{r['lines_per_piece_se']:.4f}  "
         f"deaths/pc {r['top_outs_per_piece']:.4f}  pieces/game {r['pieces_per_game']:5.1f}  "
@@ -93,6 +101,10 @@ def main() -> None:
     p.add_argument("--workers", type=int, default=12)
     p.add_argument("--seed", type=int, default=EVAL_SEED)
     p.add_argument("--every", type=int, default=1)
+    p.add_argument("--last", type=int, default=0,
+                   help="evaluate only the final N checkpoints (0 = all)")
+    p.add_argument("--append", action="store_true",
+                   help="append to eval.jsonl instead of replacing it")
     p.add_argument("--device", default="auto")
     args = p.parse_args()
 
@@ -102,6 +114,11 @@ def main() -> None:
     if device == "auto":
         device = "mps" if torch.backends.mps.is_available() else "cpu"
     torch.set_num_threads(1)
+    # The policy samples its actions rather than taking the argmax, so without a
+    # fixed torch seed two evaluations of the same checkpoint play different
+    # games and the published number cannot be reproduced. Seeded from --seed so
+    # the env seeds and the action draws move together.
+    torch.manual_seed(args.seed)
     reward_fn = FrameReward.load(args.reward, device=device)
 
     for target in args.targets:
@@ -123,8 +140,10 @@ def main() -> None:
         # agent is called, so a pretrained directory evaluates like a run.
         checkpoints = sorted(run.glob("ckpt_*.pt")) or sorted(run.glob("policy.pt"))
         checkpoints = checkpoints[args.every - 1 :: args.every] if args.every > 1 else checkpoints
+        if args.last:
+            checkpoints = checkpoints[-args.last :]
         stack = int(config.get("frame_stack", 4))
-        with (run / "eval.jsonl").open("w") as log:
+        with (run / "eval.jsonl").open("a" if args.append else "w") as log:
             for checkpoint in checkpoints:
                 result = play(
                     checkpoint_actor(checkpoint, device, (stack, 88, 88)), reward_fn,
