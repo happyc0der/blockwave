@@ -390,10 +390,24 @@ the contrasts it declines to make.
 uv sync --extra dev --extra rl
 ```
 
-Watch the trained agents play, straight from the clone — no training required.
+**Watch the agent play, live, in the game's own window** — straight from the
+clone, no training required:
+
+```bash
+uv run python -m blockwave_rl.world.watch_pixel pretrained/pixel/policy.pt --live
+```
+
+It plays at real time, which is deliberately slow: the agent decides five times
+a second, and one decision is one engine tick, so what you see is every state
+the game passes through at the rate the agent actually plays. `--speed 3` runs
+it faster. Esc, Q or closing the window stops it; games come from the held-out
+evaluation seed in order, never picked for looking good. The window shows the
+score — that is for you. The agent's input is still the 88×88 crop with the HUD
+cut out, and the firewall test asserts that.
+
 `pretrained/pixel` is the 50M-step pixel agent and the reward it learned with;
-`pretrained/board` is the 150M-step board-state agent. Both commands write an
-MP4 of one complete game on a held-out seed, and need `ffmpeg`:
+`pretrained/board` is the 150M-step board-state agent. Without `--live`, both
+write an MP4 of one complete game instead, and need `ffmpeg`:
 
 ```bash
 uv run python -m blockwave_rl.world.watch_pixel pretrained/pixel/policy.pt   # the pixel agent
