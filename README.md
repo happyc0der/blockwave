@@ -306,6 +306,12 @@ can still reach. A board it can still do many different things with is worth
 more than one where its options have collapsed. Nothing in that mentions lines,
 and the agent is never told it scored.
 
+Four documents, in reading order. This section is the summary and the
+commands. [RESEARCH.md](RESEARCH.md) is the research log — what was tried,
+what worked, what did not, and the numbers, failures included.
+[STATUS.md](STATUS.md) is where the project stands: what is settled, what is
+open, and the tooling. [DESIGN.md](DESIGN.md) covers the game's engineering.
+
 There are two tracks:
 
 - The **board-state** track reads the true occupancy grid and counts futures
